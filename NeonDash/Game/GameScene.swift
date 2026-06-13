@@ -26,6 +26,8 @@ final class GameScene: SKScene, SKPhysicsContactDelegate {
 
     private var trail: SKEmitterNode?
 
+    weak var state: GameState?
+
     override func didMove(to view: SKView) {
         backgroundColor = .black
         anchorPoint = .zero
@@ -146,7 +148,11 @@ final class GameScene: SKScene, SKPhysicsContactDelegate {
         addChild(obstacle)
 
         let fall = SKAction.moveTo(y: -60, duration: fallDuration)
-        obstacle.run(.sequence([fall, .removeFromParent()]))
+        let award = SKAction.run { [weak self] in
+            guard let self, !self.isGameOver else { return }
+            self.state?.addPoint()
+        }
+        obstacle.run(.sequence([fall, award, .removeFromParent()]))
     }
 
     // MARK: - Collision
