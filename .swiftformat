@@ -1,0 +1,14 @@
+# Config swiftformat partagée — évite que chacun ait son propre style.
+# Lancer: `swiftformat .`
+
+--indent 4
+--maxwidth 110
+--swiftversion 5.9
+--commas inline
+--trimwhitespace always
+--wraparguments before-first
+--wrapparameters before-first
+--wrapcollections before-first
+--self remove
+--header strip
+--ifdef no-indent
