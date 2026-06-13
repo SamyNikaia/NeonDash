@@ -170,5 +170,24 @@ final class GameScene: SKScene, SKPhysicsContactDelegate {
             .forEach { $0.removeAllActions() }
         trail?.particleBirthRate = 0
         playerNode.run(.fadeAlpha(to: 0.3, duration: 0.2))
+        state?.endGame()
+    }
+
+    // MARK: - Restart
+
+    func restart() {
+        isGameOver = false
+        children
+            .filter { $0.physicsBody?.categoryBitMask == PhysicsCategory.obstacle }
+            .forEach { $0.removeFromParent() }
+
+        currentRail = .left
+        playerNode.removeAllActions()
+        playerNode.position = CGPoint(x: leftRailX, y: playerY)
+        playerNode.run(.fadeAlpha(to: 1.0, duration: 0.2))
+        trail?.particleBirthRate = 90
+
+        state?.reset()
+        startSpawning()
     }
 }

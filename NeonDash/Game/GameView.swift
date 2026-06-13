@@ -10,8 +10,21 @@ struct GameView: View {
             ZStack(alignment: .top) {
                 SpriteView(scene: configure(scene, for: proxy.size))
                     .ignoresSafeArea()
+
                 HUDOverlay(state: state)
+                    .opacity(state.isGameOver ? 0 : 1)
+
+                if state.isGameOver {
+                    GameOverView(
+                        score: state.score,
+                        best: state.best,
+                        isNewBest: state.isNewBest,
+                        onRestart: { scene.restart() }
+                    )
+                    .transition(.opacity)
+                }
             }
+            .animation(.easeInOut(duration: 0.25), value: state.isGameOver)
         }
     }
 
