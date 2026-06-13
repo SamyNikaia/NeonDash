@@ -10,12 +10,14 @@
 		0BBB5A7CE45D3AED584B16DD /* ContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9505ADC60294E0FF1249CE55 /* ContentView.swift */; };
 		0BCDC26F0EDFC09BE5B4A2CE /* GameScene.swift in Sources */ = {isa = PBXBuildFile; fileRef = 49E63A562D2EF3689C78B583 /* GameScene.swift */; };
 		0FBC31E53DB8F42F3D15CBAA /* NeonDashApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6743595B07E4F75340524785 /* NeonDashApp.swift */; };
+		2367D661716A7500D1ED5A48 /* Theme.swift in Sources */ = {isa = PBXBuildFile; fileRef = 216771D1AEC4194261C5874E /* Theme.swift */; };
 		4AFCC1491E6ED1A847A6BACF /* Preview Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 359FAFFDABF333750FB15CBA /* Preview Assets.xcassets */; };
 		4ED7B454C2531934FEC03D9C /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = B6346F8B3FE279667B411951 /* Assets.xcassets */; };
 		5EF54B4581BA36C2F4B5575A /* GameView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A15097ADDD76818D5A625A32 /* GameView.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
+		216771D1AEC4194261C5874E /* Theme.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Theme.swift; sourceTree = "<group>"; };
 		359FAFFDABF333750FB15CBA /* Preview Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = "Preview Assets.xcassets"; sourceTree = "<group>"; };
 		49E63A562D2EF3689C78B583 /* GameScene.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GameScene.swift; sourceTree = "<group>"; };
 		6743595B07E4F75340524785 /* NeonDashApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NeonDashApp.swift; sourceTree = "<group>"; };
@@ -59,6 +61,7 @@
 			children = (
 				49E63A562D2EF3689C78B583 /* GameScene.swift */,
 				A15097ADDD76818D5A625A32 /* GameView.swift */,
+				216771D1AEC4194261C5874E /* Theme.swift */,
 			);
 			path = Game;
 			sourceTree = "<group>";
@@ -143,6 +146,7 @@
 				0BCDC26F0EDFC09BE5B4A2CE /* GameScene.swift in Sources */,
 				5EF54B4581BA36C2F4B5575A /* GameView.swift in Sources */,
 				0FBC31E53DB8F42F3D15CBAA /* NeonDashApp.swift in Sources */,
+				2367D661716A7500D1ED5A48 /* Theme.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
