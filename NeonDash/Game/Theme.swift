@@ -7,6 +7,7 @@ enum Theme {
 
     static let player = SKColor(red: 1.00, green: 0.17, blue: 0.84, alpha: 1)
     static let obstacle = SKColor(red: 0.12, green: 0.96, blue: 1.00, alpha: 1)
+    static let obstacleFast = SKColor(red: 1.00, green: 0.42, blue: 0.16, alpha: 1)
     static let rail = SKColor(red: 0.50, green: 0.30, blue: 0.80, alpha: 1)
 
     /// Layered halo + solid core for a cheap neon glow.

@@ -4,11 +4,40 @@ final class GameScene: SKScene, SKPhysicsContactDelegate {
 
     enum Rail {
         case left, right
+
+        var opposite: Rail { self == .left ? .right : .left }
     }
 
     private enum PhysicsCategory {
         static let player: UInt32 = 1 << 0
         static let obstacle: UInt32 = 1 << 1
+    }
+
+    private enum ObstacleVariant {
+        case standard
+        case long
+        case fast
+
+        var size: CGSize {
+            switch self {
+            case .standard, .fast: return CGSize(width: 72, height: 16)
+            case .long: return CGSize(width: 72, height: 44)
+            }
+        }
+
+        var color: SKColor {
+            switch self {
+            case .standard, .long: return Theme.obstacle
+            case .fast: return Theme.obstacleFast
+            }
+        }
+
+        var speedMultiplier: Double {
+            switch self {
+            case .standard, .long: return 1.0
+            case .fast: return 1.7
+            }
+        }
     }
 
     private let playerRadius: CGFloat = 14
@@ -193,14 +222,47 @@ final class GameScene: SKScene, SKPhysicsContactDelegate {
     }
 
     private func spawnObstacle() {
-        let onLeft = Bool.random()
-        let railX = onLeft ? leftRailX : rightRailX
-        let barSize = CGSize(width: 72, height: 16)
+        let rail: Rail = Bool.random() ? .left : .right
+
+        if rollPaired() {
+            spawnSingle(rail: rail, variant: .standard)
+            run(.sequence([
+                .wait(forDuration: 0.38),
+                .run { [weak self] in
+                    self?.spawnSingle(rail: rail.opposite, variant: .standard)
+                }
+            ]))
+        } else {
+            spawnSingle(rail: rail, variant: pickVariant())
+        }
+    }
+
+    private func pickVariant() -> ObstacleVariant {
+        let score = state?.score ?? 0
+        let r = Double.random(in: 0...1)
+        switch score {
+        case 0..<15: return .standard
+        case 15..<35: return r < 0.78 ? .standard : (r < 0.90 ? .long : .fast)
+        case 35..<60: return r < 0.55 ? .standard : (r < 0.78 ? .long : .fast)
+        default: return r < 0.42 ? .standard : (r < 0.70 ? .long : .fast)
+        }
+    }
+
+    private func rollPaired() -> Bool {
+        let score = state?.score ?? 0
+        guard score >= 25 else { return false }
+        let chance = min(0.10 + Double(score - 25) * 0.003, 0.28)
+        return Double.random(in: 0...1) < chance
+    }
+
+    private func spawnSingle(rail: Rail, variant: ObstacleVariant) {
+        let railX = (rail == .left) ? leftRailX : rightRailX
+        let barSize = variant.size
 
         let obstacle = SKNode()
         obstacle.position = CGPoint(x: railX, y: size.height + 60)
         obstacle.zPosition = 5
-        obstacle.addChild(Theme.glowingBar(size: barSize, color: Theme.obstacle))
+        obstacle.addChild(Theme.glowingBar(size: barSize, color: variant.color))
 
         let body = SKPhysicsBody(rectangleOf: barSize)
         body.isDynamic = true
@@ -212,7 +274,8 @@ final class GameScene: SKScene, SKPhysicsContactDelegate {
 
         addChild(obstacle)
 
-        let fall = SKAction.moveTo(y: -60, duration: currentFallDuration())
+        let duration = currentFallDuration() / variant.speedMultiplier
+        let fall = SKAction.moveTo(y: -60, duration: duration)
         let award = SKAction.run { [weak self] in
             guard let self, !self.isGameOver else { return }
             self.state?.addPoint()
