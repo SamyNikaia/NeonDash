@@ -37,10 +37,31 @@ final class GameScene: SKScene, SKPhysicsContactDelegate {
         physicsWorld.gravity = .zero
         physicsWorld.contactDelegate = self
 
+        let cam = SKCameraNode()
+        cam.position = CGPoint(x: size.width / 2, y: size.height / 2)
+        addChild(cam)
+        camera = cam
+
         buildBackground()
         buildRails()
         buildPlayer()
-        startSpawning()
+
+        Haptics.prepare()
+        playIntro()
+    }
+
+    private func playIntro() {
+        playerNode.setScale(0)
+        playerNode.alpha = 0
+        let pop = SKAction.group([
+            .scale(to: 1.15, duration: 0.28),
+            .fadeIn(withDuration: 0.28)
+        ])
+        pop.timingMode = .easeOut
+        let settle = SKAction.scale(to: 1.0, duration: 0.12)
+        let startSpawn = SKAction.run { [weak self] in self?.startSpawning() }
+        playerNode.run(.sequence([pop, settle]))
+        run(.sequence([.wait(forDuration: 0.55), startSpawn]))
     }
 
     // MARK: - World
@@ -117,6 +138,22 @@ final class GameScene: SKScene, SKPhysicsContactDelegate {
         let move = SKAction.moveTo(x: targetX, duration: switchDuration)
         move.timingMode = .easeOut
         playerNode.run(move)
+        Haptics.tap()
+    }
+
+    private func shakeScreen(intensity: CGFloat = 22) {
+        guard let camera else { return }
+        let center = CGPoint(x: size.width / 2, y: size.height / 2)
+        var actions: [SKAction] = []
+        for _ in 0..<6 {
+            let dx = CGFloat.random(in: -intensity...intensity)
+            let dy = CGFloat.random(in: -intensity...intensity)
+            let step = SKAction.move(to: CGPoint(x: center.x + dx, y: center.y + dy), duration: 0.04)
+            step.timingMode = .easeOut
+            actions.append(step)
+        }
+        actions.append(.move(to: center, duration: 0.06))
+        camera.run(.sequence(actions))
     }
 
     // MARK: - Obstacles
@@ -170,6 +207,8 @@ final class GameScene: SKScene, SKPhysicsContactDelegate {
             .forEach { $0.removeAllActions() }
         trail?.particleBirthRate = 0
         playerNode.run(.fadeAlpha(to: 0.3, duration: 0.2))
+        Haptics.crash()
+        shakeScreen()
         state?.endGame()
     }
 
@@ -184,10 +223,9 @@ final class GameScene: SKScene, SKPhysicsContactDelegate {
         currentRail = .left
         playerNode.removeAllActions()
         playerNode.position = CGPoint(x: leftRailX, y: playerY)
-        playerNode.run(.fadeAlpha(to: 1.0, duration: 0.2))
         trail?.particleBirthRate = 90
 
         state?.reset()
-        startSpawning()
+        playIntro()
     }
 }
