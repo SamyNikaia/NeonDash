@@ -21,7 +21,10 @@ final class GameScene: SKScene, SKPhysicsContactDelegate {
 
     private let spawnActionKey = "spawn"
     private let baseSpawnInterval: TimeInterval = 0.9
-    private let fallDuration: TimeInterval = 2.0
+    private let minSpawnInterval: TimeInterval = 0.40
+    private let baseFallDuration: TimeInterval = 2.0
+    private let minFallDuration: TimeInterval = 1.0
+    private let rampScoreCeiling: Double = 80
     private var isGameOver = false
 
     private var trail: SKEmitterNode?
@@ -159,9 +162,34 @@ final class GameScene: SKScene, SKPhysicsContactDelegate {
     // MARK: - Obstacles
 
     private func startSpawning() {
-        let spawn = SKAction.run { [weak self] in self?.spawnObstacle() }
-        let wait = SKAction.wait(forDuration: baseSpawnInterval, withRange: 0.25)
-        run(.repeatForever(.sequence([spawn, wait])), withKey: spawnActionKey)
+        scheduleNextSpawn()
+    }
+
+    private func scheduleNextSpawn() {
+        guard !isGameOver else { return }
+        let interval = currentSpawnInterval()
+        let wait = SKAction.wait(forDuration: interval, withRange: interval * 0.25)
+        let spawnAndChain = SKAction.run { [weak self] in
+            guard let self, !self.isGameOver else { return }
+            self.spawnObstacle()
+            self.scheduleNextSpawn()
+        }
+        run(.sequence([wait, spawnAndChain]), withKey: spawnActionKey)
+    }
+
+    private func difficultyT() -> Double {
+        let score = Double(state?.score ?? 0)
+        return min(score / rampScoreCeiling, 1.0)
+    }
+
+    private func currentSpawnInterval() -> TimeInterval {
+        let t = difficultyT()
+        return baseSpawnInterval - (baseSpawnInterval - minSpawnInterval) * t
+    }
+
+    private func currentFallDuration() -> TimeInterval {
+        let t = difficultyT()
+        return baseFallDuration - (baseFallDuration - minFallDuration) * t
     }
 
     private func spawnObstacle() {
@@ -184,7 +212,7 @@ final class GameScene: SKScene, SKPhysicsContactDelegate {
 
         addChild(obstacle)
 
-        let fall = SKAction.moveTo(y: -60, duration: fallDuration)
+        let fall = SKAction.moveTo(y: -60, duration: currentFallDuration())
         let award = SKAction.run { [weak self] in
             guard let self, !self.isGameOver else { return }
             self.state?.addPoint()
