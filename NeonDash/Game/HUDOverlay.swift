@@ -4,6 +4,29 @@ struct HUDOverlay: View {
     @ObservedObject var state: GameState
 
     var body: some View {
+        ZStack(alignment: .top) {
+            HStack {
+                Spacer()
+                HStack(spacing: 6) {
+                    Circle()
+                        .fill(Color(red: 1.0, green: 0.85, blue: 0.25))
+                        .frame(width: 10, height: 10)
+                        .shadow(color: Color(red: 1.0, green: 0.85, blue: 0.25).opacity(0.8), radius: 4)
+                    Text("\(state.coins)")
+                        .font(.system(size: 14, weight: .heavy, design: .rounded))
+                        .monospacedDigit()
+                        .foregroundStyle(.white)
+                }
+                .padding(.trailing, 18)
+                .padding(.top, 14)
+            }
+
+            scoreStack
+        }
+        .allowsHitTesting(false)
+    }
+
+    private var scoreStack: some View {
         VStack(spacing: 4) {
             Text("BEST  \(state.best)")
                 .font(.system(size: 11, weight: .bold, design: .rounded))
@@ -36,7 +59,6 @@ struct HUDOverlay: View {
         .padding(.top, 12)
         .frame(maxWidth: .infinity, alignment: .top)
         .animation(.spring(response: 0.3, dampingFraction: 0.7), value: state.multiplier)
-        .allowsHitTesting(false)
     }
 
     private func multiplierColor(_ m: Int) -> Color {

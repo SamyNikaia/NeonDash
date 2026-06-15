@@ -11,6 +11,7 @@ final class GameScene: SKScene, SKPhysicsContactDelegate {
     private enum PhysicsCategory {
         static let player: UInt32 = 1 << 0
         static let obstacle: UInt32 = 1 << 1
+        static let coin: UInt32 = 1 << 2
     }
 
     private enum ObstacleVariant {
@@ -129,7 +130,7 @@ final class GameScene: SKScene, SKPhysicsContactDelegate {
         body.affectedByGravity = false
         body.allowsRotation = false
         body.categoryBitMask = PhysicsCategory.player
-        body.contactTestBitMask = PhysicsCategory.obstacle
+        body.contactTestBitMask = PhysicsCategory.obstacle | PhysicsCategory.coin
         body.collisionBitMask = 0
         playerNode.physicsBody = body
 
@@ -235,6 +236,37 @@ final class GameScene: SKScene, SKPhysicsContactDelegate {
         } else {
             spawnSingle(rail: rail, variant: pickVariant())
         }
+
+        if Double.random(in: 0...1) < 0.20 {
+            let coinRail: Rail = Bool.random() ? .left : .right
+            let delay = Double.random(in: 0.28...0.55)
+            run(.sequence([
+                .wait(forDuration: delay),
+                .run { [weak self] in self?.spawnCoin(rail: coinRail) }
+            ]))
+        }
+    }
+
+    private func spawnCoin(rail: Rail) {
+        let railX = (rail == .left) ? leftRailX : rightRailX
+        let coin = SKNode()
+        coin.name = "coin"
+        coin.position = CGPoint(x: railX, y: size.height + 40)
+        coin.zPosition = 6
+        coin.addChild(Theme.glowingCircle(radius: 9, color: Theme.coin))
+
+        let body = SKPhysicsBody(circleOfRadius: 11)
+        body.isDynamic = true
+        body.affectedByGravity = false
+        body.categoryBitMask = PhysicsCategory.coin
+        body.contactTestBitMask = PhysicsCategory.player
+        body.collisionBitMask = 0
+        coin.physicsBody = body
+
+        addChild(coin)
+
+        let fall = SKAction.moveTo(y: -40, duration: currentFallDuration() * 1.15)
+        coin.run(.sequence([fall, .removeFromParent()]))
     }
 
     private func pickVariant() -> ObstacleVariant {
@@ -287,14 +319,34 @@ final class GameScene: SKScene, SKPhysicsContactDelegate {
 
     func didBegin(_ contact: SKPhysicsContact) {
         guard !isGameOver else { return }
-        triggerGameOver()
+        let bodies = [contact.bodyA, contact.bodyB]
+        if let coinBody = bodies.first(where: { $0.categoryBitMask == PhysicsCategory.coin }) {
+            collect(coinBody.node)
+        } else {
+            triggerGameOver()
+        }
+    }
+
+    private func collect(_ node: SKNode?) {
+        guard let node else { return }
+        node.physicsBody = nil
+        state?.addCoins(1)
+        Haptics.tap()
+        let pop = SKAction.group([
+            .scale(to: 1.9, duration: 0.18),
+            .fadeOut(withDuration: 0.18)
+        ])
+        node.run(.sequence([pop, .removeFromParent()]))
     }
 
     private func triggerGameOver() {
         isGameOver = true
         removeAction(forKey: spawnActionKey)
         children
-            .filter { $0.physicsBody?.categoryBitMask == PhysicsCategory.obstacle }
+            .filter {
+                let cat = $0.physicsBody?.categoryBitMask
+                return cat == PhysicsCategory.obstacle || cat == PhysicsCategory.coin
+            }
             .forEach { $0.removeAllActions() }
         trail?.particleBirthRate = 0
         playerNode.run(.fadeAlpha(to: 0.3, duration: 0.2))
@@ -308,7 +360,10 @@ final class GameScene: SKScene, SKPhysicsContactDelegate {
     func restart() {
         isGameOver = false
         children
-            .filter { $0.physicsBody?.categoryBitMask == PhysicsCategory.obstacle }
+            .filter {
+                let cat = $0.physicsBody?.categoryBitMask
+                return cat == PhysicsCategory.obstacle || cat == PhysicsCategory.coin
+            }
             .forEach { $0.removeFromParent() }
 
         currentRail = .left
