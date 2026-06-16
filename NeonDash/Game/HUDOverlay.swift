@@ -39,6 +39,11 @@ struct HUDOverlay: View {
                 .foregroundStyle(.white)
                 .shadow(color: .white.opacity(0.4), radius: 8)
 
+            if state.isOnFire {
+                FirePill()
+                    .transition(.scale.combined(with: .opacity))
+            }
+
             if state.combo > 0 {
                 HStack(spacing: 8) {
                     Text("×\(state.multiplier)")
@@ -59,6 +64,30 @@ struct HUDOverlay: View {
         .padding(.top, 12)
         .frame(maxWidth: .infinity, alignment: .top)
         .animation(.spring(response: 0.3, dampingFraction: 0.7), value: state.multiplier)
+        .animation(.easeOut(duration: 0.25), value: state.isOnFire)
+    }
+
+    private struct FirePill: View {
+        @State private var pulse: CGFloat = 1.0
+        var body: some View {
+            Text("ON FIRE")
+                .font(.system(size: 12, weight: .black, design: .rounded))
+                .tracking(5)
+                .foregroundStyle(.white)
+                .padding(.horizontal, 14)
+                .padding(.vertical, 5)
+                .background(
+                    Capsule()
+                        .fill(Color(red: 1.0, green: 0.38, blue: 0.10))
+                        .shadow(color: Color(red: 1.0, green: 0.38, blue: 0.10).opacity(0.8), radius: 10)
+                )
+                .scaleEffect(pulse)
+                .onAppear {
+                    withAnimation(.easeInOut(duration: 0.7).repeatForever(autoreverses: true)) {
+                        pulse = 1.08
+                    }
+                }
+        }
     }
 
     private func multiplierColor(_ m: Int) -> Color {

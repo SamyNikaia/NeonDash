@@ -22,6 +22,8 @@ final class GameState: ObservableObject {
         self.coins = defaults.integer(forKey: coinsKey)
     }
 
+    static let fireComboThreshold = 10
+
     var multiplier: Int {
         switch combo {
         case 0..<5: return 1
@@ -30,6 +32,8 @@ final class GameState: ObservableObject {
         default: return 5
         }
     }
+
+    var isOnFire: Bool { combo >= Self.fireComboThreshold }
 
     func reset() {
         score = 0

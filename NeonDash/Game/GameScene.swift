@@ -60,6 +60,8 @@ final class GameScene: SKScene, SKPhysicsContactDelegate {
     private var trail: SKEmitterNode?
     private var backgroundNode: SKSpriteNode?
     private var currentPaletteIndex: Int = 0
+    private var fireOverlay: SKSpriteNode?
+    private var isOnFire: Bool = false
 
     weak var state: GameState?
 
@@ -195,6 +197,47 @@ final class GameScene: SKScene, SKPhysicsContactDelegate {
     override func update(_ currentTime: TimeInterval) {
         guard !isGameOver else { return }
         updatePaletteForScore()
+        updateFireState()
+    }
+
+    private func updateFireState() {
+        let shouldFire = state?.isOnFire ?? false
+        if shouldFire && !isOnFire {
+            enterFire()
+        } else if !shouldFire && isOnFire {
+            exitFire()
+        }
+    }
+
+    private func enterFire() {
+        isOnFire = true
+        trail?.particleColor = Theme.fire
+        trail?.particleBirthRate = 160
+        playerNode.run(.scale(to: 1.25, duration: 0.25))
+
+        let overlay = SKSpriteNode(color: Theme.fire, size: size)
+        overlay.anchorPoint = .zero
+        overlay.zPosition = -40
+        overlay.blendMode = .add
+        overlay.alpha = 0
+        addChild(overlay)
+        fireOverlay = overlay
+
+        let pulse = SKAction.sequence([
+            .fadeAlpha(to: 0.18, duration: 0.7),
+            .fadeAlpha(to: 0.08, duration: 0.7)
+        ])
+        overlay.run(.repeatForever(pulse), withKey: "firePulse")
+    }
+
+    private func exitFire() {
+        isOnFire = false
+        trail?.particleColor = Theme.player
+        trail?.particleBirthRate = 90
+        playerNode.run(.scale(to: 1.0, duration: 0.25))
+        fireOverlay?.removeAction(forKey: "firePulse")
+        fireOverlay?.run(.sequence([.fadeOut(withDuration: 0.4), .removeFromParent()]))
+        fireOverlay = nil
     }
 
     // MARK: - Input
@@ -389,6 +432,7 @@ final class GameScene: SKScene, SKPhysicsContactDelegate {
             .forEach { $0.removeAllActions() }
         trail?.particleBirthRate = 0
         playerNode.run(.fadeAlpha(to: 0.3, duration: 0.2))
+        if isOnFire { exitFire() }
         Haptics.crash()
         shakeScreen()
         state?.endGame()
