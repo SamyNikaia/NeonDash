@@ -2,8 +2,35 @@ import SpriteKit
 import UIKit
 
 enum Theme {
-    static let backgroundTop = SKColor(red: 0.06, green: 0.02, blue: 0.18, alpha: 1)
-    static let backgroundBottom = SKColor(red: 0.00, green: 0.00, blue: 0.02, alpha: 1)
+    struct BackgroundPalette {
+        let top: SKColor
+        let bottom: SKColor
+    }
+
+    static let palettes: [BackgroundPalette] = [
+        BackgroundPalette(
+            top:    SKColor(red: 0.06, green: 0.02, blue: 0.18, alpha: 1),
+            bottom: SKColor(red: 0.00, green: 0.00, blue: 0.02, alpha: 1)
+        ),
+        BackgroundPalette(
+            top:    SKColor(red: 0.22, green: 0.05, blue: 0.32, alpha: 1),
+            bottom: SKColor(red: 0.04, green: 0.00, blue: 0.10, alpha: 1)
+        ),
+        BackgroundPalette(
+            top:    SKColor(red: 0.38, green: 0.04, blue: 0.26, alpha: 1),
+            bottom: SKColor(red: 0.10, green: 0.00, blue: 0.08, alpha: 1)
+        ),
+        BackgroundPalette(
+            top:    SKColor(red: 0.02, green: 0.20, blue: 0.30, alpha: 1),
+            bottom: SKColor(red: 0.00, green: 0.04, blue: 0.10, alpha: 1)
+        ),
+        BackgroundPalette(
+            top:    SKColor(red: 0.04, green: 0.24, blue: 0.10, alpha: 1),
+            bottom: SKColor(red: 0.00, green: 0.06, blue: 0.02, alpha: 1)
+        )
+    ]
+
+    static let paletteThresholds: [Int] = [0, 25, 50, 100, 200]
 
     static let player = SKColor(red: 1.00, green: 0.17, blue: 0.84, alpha: 1)
     static let obstacle = SKColor(red: 0.12, green: 0.96, blue: 1.00, alpha: 1)

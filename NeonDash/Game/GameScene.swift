@@ -58,6 +58,8 @@ final class GameScene: SKScene, SKPhysicsContactDelegate {
     private var isGameOver = false
 
     private var trail: SKEmitterNode?
+    private var backgroundNode: SKSpriteNode?
+    private var currentPaletteIndex: Int = 0
 
     weak var state: GameState?
 
@@ -100,11 +102,41 @@ final class GameScene: SKScene, SKPhysicsContactDelegate {
     // MARK: - World
 
     private func buildBackground() {
-        let texture = SKTexture.verticalGradient(top: Theme.backgroundTop, bottom: Theme.backgroundBottom, size: size)
-        let bg = SKSpriteNode(texture: texture, size: size)
-        bg.anchorPoint = .zero
-        bg.zPosition = -100
+        currentPaletteIndex = 0
+        let bg = makeBackgroundNode(for: Theme.palettes[0])
         addChild(bg)
+        backgroundNode = bg
+    }
+
+    private func makeBackgroundNode(for palette: Theme.BackgroundPalette) -> SKSpriteNode {
+        let texture = SKTexture.verticalGradient(top: palette.top, bottom: palette.bottom, size: size)
+        let node = SKSpriteNode(texture: texture, size: size)
+        node.anchorPoint = .zero
+        node.zPosition = -100
+        return node
+    }
+
+    private func updatePaletteForScore() {
+        let score = state?.score ?? 0
+        let newIndex = Theme.paletteThresholds
+            .enumerated()
+            .last(where: { $0.element <= score })?.offset ?? 0
+        guard newIndex != currentPaletteIndex else { return }
+        currentPaletteIndex = newIndex
+        transitionToPalette(Theme.palettes[newIndex])
+    }
+
+    private func transitionToPalette(_ palette: Theme.BackgroundPalette) {
+        let newBg = makeBackgroundNode(for: palette)
+        newBg.zPosition = -99
+        newBg.alpha = 0
+        addChild(newBg)
+        let old = backgroundNode
+        backgroundNode = newBg
+        newBg.run(.fadeIn(withDuration: 0.8)) {
+            newBg.zPosition = -100
+            old?.removeFromParent()
+        }
     }
 
     private func buildRails() {
@@ -156,6 +188,13 @@ final class GameScene: SKScene, SKPhysicsContactDelegate {
         emitter.position = CGPoint(x: 0, y: 0)
         emitter.zPosition = -1
         return emitter
+    }
+
+    // MARK: - Per-frame
+
+    override func update(_ currentTime: TimeInterval) {
+        guard !isGameOver else { return }
+        updatePaletteForScore()
     }
 
     // MARK: - Input
@@ -370,6 +409,11 @@ final class GameScene: SKScene, SKPhysicsContactDelegate {
         playerNode.removeAllActions()
         playerNode.position = CGPoint(x: leftRailX, y: playerY)
         trail?.particleBirthRate = 90
+
+        if currentPaletteIndex != 0 {
+            transitionToPalette(Theme.palettes[0])
+            currentPaletteIndex = 0
+        }
 
         state?.reset()
         playIntro()
