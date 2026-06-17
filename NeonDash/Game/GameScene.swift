@@ -84,6 +84,7 @@ final class GameScene: SKScene, SKPhysicsContactDelegate {
         buildPlayer()
 
         Haptics.prepare()
+        AudioManager.shared.startMainMusic()
         playIntro()
     }
 
@@ -214,6 +215,7 @@ final class GameScene: SKScene, SKPhysicsContactDelegate {
         trail?.particleColor = Theme.fire
         trail?.particleBirthRate = 160
         playerNode.run(.scale(to: 1.25, duration: 0.25))
+        AudioManager.shared.enterFire()
 
         let overlay = SKSpriteNode(color: Theme.fire, size: size)
         overlay.anchorPoint = .zero
@@ -238,6 +240,7 @@ final class GameScene: SKScene, SKPhysicsContactDelegate {
         fireOverlay?.removeAction(forKey: "firePulse")
         fireOverlay?.run(.sequence([.fadeOut(withDuration: 0.4), .removeFromParent()]))
         fireOverlay = nil
+        AudioManager.shared.exitFire()
     }
 
     // MARK: - Input
@@ -254,6 +257,7 @@ final class GameScene: SKScene, SKPhysicsContactDelegate {
         move.timingMode = .easeOut
         playerNode.run(move)
         Haptics.tap()
+        AudioManager.shared.playSwitch()
     }
 
     private func shakeScreen(intensity: CGFloat = 22) {
@@ -414,6 +418,7 @@ final class GameScene: SKScene, SKPhysicsContactDelegate {
         node.physicsBody = nil
         state?.addCoins(1)
         Haptics.tap()
+        AudioManager.shared.playCoin()
         let pop = SKAction.group([
             .scale(to: 1.9, duration: 0.18),
             .fadeOut(withDuration: 0.18)
@@ -434,6 +439,8 @@ final class GameScene: SKScene, SKPhysicsContactDelegate {
         playerNode.run(.fadeAlpha(to: 0.3, duration: 0.2))
         if isOnFire { exitFire() }
         Haptics.crash()
+        AudioManager.shared.playCrash()
+        AudioManager.shared.stopMusic()
         shakeScreen()
         state?.endGame()
     }
@@ -460,6 +467,7 @@ final class GameScene: SKScene, SKPhysicsContactDelegate {
         }
 
         state?.reset()
+        AudioManager.shared.startMainMusic()
         playIntro()
     }
 }
