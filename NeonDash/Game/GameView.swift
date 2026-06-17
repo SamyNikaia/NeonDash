@@ -2,7 +2,9 @@ import SwiftUI
 import SpriteKit
 
 struct GameView: View {
-    @StateObject private var state = GameState()
+    @ObservedObject var state: GameState
+    let onExit: () -> Void
+
     @State private var scene = GameScene()
 
     var body: some View {
@@ -19,12 +21,19 @@ struct GameView: View {
                         score: state.score,
                         best: state.best,
                         isNewBest: state.isNewBest,
-                        onRestart: { scene.restart() }
+                        onRestart: { scene.restart() },
+                        onMenu: {
+                            AudioManager.shared.stopMusic()
+                            onExit()
+                        }
                     )
                     .transition(.opacity)
                 }
             }
             .animation(.easeInOut(duration: 0.25), value: state.isGameOver)
+            .onAppear {
+                state.reset()
+            }
         }
     }
 
@@ -36,8 +45,4 @@ struct GameView: View {
         }
         return scene
     }
-}
-
-#Preview {
-    GameView()
 }

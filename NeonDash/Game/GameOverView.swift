@@ -5,10 +5,13 @@ struct GameOverView: View {
     let best: Int
     let isNewBest: Bool
     let onRestart: () -> Void
+    let onMenu: () -> Void
 
     var body: some View {
         ZStack {
             Color.black.opacity(0.55).ignoresSafeArea()
+                .contentShape(Rectangle())
+                .onTapGesture { onRestart() }
 
             VStack(spacing: 28) {
                 Text("GAME OVER")
@@ -43,12 +46,25 @@ struct GameOverView: View {
                     .foregroundStyle(.white.opacity(0.55))
                     .padding(.top, 18)
             }
+
+            VStack {
+                Spacer()
+                Button(action: onMenu) {
+                    Text("MENU")
+                        .font(.system(size: 11, weight: .heavy, design: .rounded))
+                        .tracking(4)
+                        .foregroundStyle(.white.opacity(0.6))
+                        .padding(.horizontal, 18)
+                        .padding(.vertical, 10)
+                        .background(Capsule().stroke(Color.white.opacity(0.18), lineWidth: 1))
+                }
+                .buttonStyle(.plain)
+                .padding(.bottom, 36)
+            }
         }
-        .contentShape(Rectangle())
-        .onTapGesture { onRestart() }
     }
 }
 
 #Preview {
-    GameOverView(score: 42, best: 31, isNewBest: true, onRestart: {})
+    GameOverView(score: 42, best: 31, isNewBest: true, onRestart: {}, onMenu: {})
 }
