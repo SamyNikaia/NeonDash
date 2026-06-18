@@ -2,10 +2,17 @@ import SpriteKit
 
 final class GameScene: SKScene, SKPhysicsContactDelegate {
 
-    enum Rail {
-        case left, right
+    enum Rail: Int, CaseIterable {
+        case left = 0, mid = 1, right = 2
 
-        var opposite: Rail { self == .left ? .right : .left }
+        func shifted(_ delta: Int) -> Rail {
+            let new = max(0, min(Rail.allCases.count - 1, rawValue + delta))
+            return Rail(rawValue: new) ?? self
+        }
+
+        static func random(excluding excluded: Rail? = nil) -> Rail {
+            Rail.allCases.filter { $0 != excluded }.randomElement()!
+        }
     }
 
     private enum PhysicsCategory {
@@ -43,9 +50,8 @@ final class GameScene: SKScene, SKPhysicsContactDelegate {
 
     private let playerRadius: CGFloat = 14
     private let playerNode = SKNode()
-    private var currentRail: Rail = .left
-    private var leftRailX: CGFloat = 0
-    private var rightRailX: CGFloat = 0
+    private var currentRail: Rail = .mid
+    private var railXs: [CGFloat] = []
     private let playerY: CGFloat = 160
     private let switchDuration: TimeInterval = 0.12
 
@@ -68,8 +74,7 @@ final class GameScene: SKScene, SKPhysicsContactDelegate {
     override func didMove(to view: SKView) {
         backgroundColor = .black
         anchorPoint = .zero
-        leftRailX = size.width * 0.32
-        rightRailX = size.width * 0.68
+        railXs = [size.width * 0.22, size.width * 0.50, size.width * 0.78]
 
         physicsWorld.gravity = .zero
         physicsWorld.contactDelegate = self
@@ -147,9 +152,9 @@ final class GameScene: SKScene, SKPhysicsContactDelegate {
     }
 
     private func buildRails() {
-        for x in [leftRailX, rightRailX] {
+        for x in railXs {
             let rail = SKShapeNode(rect: CGRect(x: x - 1, y: 0, width: 2, height: size.height))
-            rail.fillColor = Theme.rail.withAlphaComponent(0.35)
+            rail.fillColor = Theme.rail.withAlphaComponent(0.30)
             rail.strokeColor = .clear
             rail.zPosition = 1
             rail.blendMode = .add
@@ -157,8 +162,13 @@ final class GameScene: SKScene, SKPhysicsContactDelegate {
         }
     }
 
+    private func x(for rail: Rail) -> CGFloat {
+        railXs[rail.rawValue]
+    }
+
     private func buildPlayer() {
-        playerNode.position = CGPoint(x: leftRailX, y: playerY)
+        currentRail = .mid
+        playerNode.position = CGPoint(x: x(for: currentRail), y: playerY)
         playerNode.zPosition = 10
 
         let ballColor = state?.equippedBall.color ?? Theme.player
@@ -252,13 +262,16 @@ final class GameScene: SKScene, SKPhysicsContactDelegate {
 
     override func touchesBegan(_ touches: Set<UITouch>, with event: UIEvent?) {
         guard !isGameOver else { return }
-        switchRail()
+        guard let touch = touches.first else { return }
+        let direction = touch.location(in: self).x < size.width / 2 ? -1 : 1
+        switchRail(direction: direction)
     }
 
-    private func switchRail() {
-        currentRail = (currentRail == .left) ? .right : .left
-        let targetX = (currentRail == .left) ? leftRailX : rightRailX
-        let move = SKAction.moveTo(x: targetX, duration: switchDuration)
+    private func switchRail(direction: Int) {
+        let target = currentRail.shifted(direction)
+        guard target != currentRail else { return }
+        currentRail = target
+        let move = SKAction.moveTo(x: x(for: currentRail), duration: switchDuration)
         move.timingMode = .easeOut
         playerNode.run(move)
         Haptics.tap()
@@ -314,14 +327,15 @@ final class GameScene: SKScene, SKPhysicsContactDelegate {
     }
 
     private func spawnObstacle() {
-        let rail: Rail = Bool.random() ? .left : .right
+        let rail = Rail.random()
 
         if rollPaired() {
             spawnSingle(rail: rail, variant: .standard)
+            let second = Rail.random(excluding: rail)
             run(.sequence([
                 .wait(forDuration: 0.38),
                 .run { [weak self] in
-                    self?.spawnSingle(rail: rail.opposite, variant: .standard)
+                    self?.spawnSingle(rail: second, variant: .standard)
                 }
             ]))
         } else {
@@ -329,7 +343,7 @@ final class GameScene: SKScene, SKPhysicsContactDelegate {
         }
 
         if Double.random(in: 0...1) < 0.20 {
-            let coinRail: Rail = Bool.random() ? .left : .right
+            let coinRail = Rail.random()
             let delay = Double.random(in: 0.28...0.55)
             run(.sequence([
                 .wait(forDuration: delay),
@@ -339,7 +353,7 @@ final class GameScene: SKScene, SKPhysicsContactDelegate {
     }
 
     private func spawnCoin(rail: Rail) {
-        let railX = (rail == .left) ? leftRailX : rightRailX
+        let railX = x(for: rail)
         let coin = SKNode()
         coin.name = "coin"
         coin.position = CGPoint(x: railX, y: size.height + 40)
@@ -379,7 +393,7 @@ final class GameScene: SKScene, SKPhysicsContactDelegate {
     }
 
     private func spawnSingle(rail: Rail, variant: ObstacleVariant) {
-        let railX = (rail == .left) ? leftRailX : rightRailX
+        let railX = x(for: rail)
         let barSize = variant.size
 
         let obstacle = SKNode()
@@ -461,9 +475,9 @@ final class GameScene: SKScene, SKPhysicsContactDelegate {
             }
             .forEach { $0.removeFromParent() }
 
-        currentRail = .left
+        currentRail = .mid
         playerNode.removeAllActions()
-        playerNode.position = CGPoint(x: leftRailX, y: playerY)
+        playerNode.position = CGPoint(x: x(for: currentRail), y: playerY)
         trail?.particleBirthRate = 90
 
         if currentPaletteIndex != 0 {
