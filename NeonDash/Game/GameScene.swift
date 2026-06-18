@@ -104,9 +104,13 @@ final class GameScene: SKScene, SKPhysicsContactDelegate {
 
     // MARK: - World
 
+    private func currentPalettes() -> [Theme.BackgroundPalette] {
+        state?.equippedBackground.palettes ?? Theme.palettes
+    }
+
     private func buildBackground() {
         currentPaletteIndex = 0
-        let bg = makeBackgroundNode(for: Theme.palettes[0])
+        let bg = makeBackgroundNode(for: currentPalettes()[0])
         addChild(bg)
         backgroundNode = bg
     }
@@ -126,7 +130,7 @@ final class GameScene: SKScene, SKPhysicsContactDelegate {
             .last(where: { $0.element <= score })?.offset ?? 0
         guard newIndex != currentPaletteIndex else { return }
         currentPaletteIndex = newIndex
-        transitionToPalette(Theme.palettes[newIndex])
+        transitionToPalette(currentPalettes()[newIndex])
     }
 
     private func transitionToPalette(_ palette: Theme.BackgroundPalette) {
@@ -157,7 +161,8 @@ final class GameScene: SKScene, SKPhysicsContactDelegate {
         playerNode.position = CGPoint(x: leftRailX, y: playerY)
         playerNode.zPosition = 10
 
-        let visual = Theme.glowingCircle(radius: playerRadius, color: Theme.player)
+        let ballColor = state?.equippedBall.color ?? Theme.player
+        let visual = Theme.glowingCircle(radius: playerRadius, color: ballColor)
         playerNode.addChild(visual)
 
         let body = SKPhysicsBody(circleOfRadius: playerRadius)
@@ -179,7 +184,7 @@ final class GameScene: SKScene, SKPhysicsContactDelegate {
     private func makeTrail() -> SKEmitterNode {
         let emitter = SKEmitterNode()
         emitter.particleTexture = SKTexture.radialDot(radius: 8, color: .white)
-        emitter.particleColor = Theme.player
+        emitter.particleColor = state?.equippedBall.color ?? Theme.player
         emitter.particleColorBlendFactor = 1.0
         emitter.particleBlendMode = .add
         emitter.particleBirthRate = 90
@@ -234,7 +239,7 @@ final class GameScene: SKScene, SKPhysicsContactDelegate {
 
     private func exitFire() {
         isOnFire = false
-        trail?.particleColor = Theme.player
+        trail?.particleColor = state?.equippedBall.color ?? Theme.player
         trail?.particleBirthRate = 90
         playerNode.run(.scale(to: 1.0, duration: 0.25))
         fireOverlay?.removeAction(forKey: "firePulse")
