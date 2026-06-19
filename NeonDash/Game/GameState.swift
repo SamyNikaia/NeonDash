@@ -2,10 +2,13 @@ import Foundation
 import Combine
 
 final class GameState: ObservableObject {
+    static let maxLives = 3
+
     @Published private(set) var score: Int = 0
     @Published private(set) var best: Int
     @Published private(set) var combo: Int = 0
     @Published private(set) var coins: Int
+    @Published private(set) var lives: Int = GameState.maxLives
     @Published private(set) var isGameOver: Bool = false
     @Published private(set) var isNewBest: Bool = false
 
@@ -66,9 +69,24 @@ final class GameState: ObservableObject {
     func reset() {
         score = 0
         combo = 0
+        lives = Self.maxLives
         isGameOver = false
         isNewBest = false
         bestAtRunStart = best
+    }
+
+    /// Returns true if the player is still alive after the hit.
+    @discardableResult
+    func loseLife() -> Bool {
+        guard lives > 0 else { return false }
+        lives -= 1
+        combo = 0
+        return lives > 0
+    }
+
+    func addLife() {
+        guard lives < Self.maxLives else { return }
+        lives += 1
     }
 
     func addPoint() {

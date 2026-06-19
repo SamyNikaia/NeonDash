@@ -19,6 +19,7 @@ final class GameScene: SKScene, SKPhysicsContactDelegate {
         static let player: UInt32 = 1 << 0
         static let obstacle: UInt32 = 1 << 1
         static let coin: UInt32 = 1 << 2
+        static let heart: UInt32 = 1 << 3
     }
 
     private enum ObstacleVariant {
@@ -68,6 +69,8 @@ final class GameScene: SKScene, SKPhysicsContactDelegate {
     private var currentPaletteIndex: Int = 0
     private var fireOverlay: SKSpriteNode?
     private var isOnFire: Bool = false
+    private var isInvincible: Bool = false
+    private let invincibilityDuration: TimeInterval = 1.0
 
     weak var state: GameState?
 
@@ -180,7 +183,7 @@ final class GameScene: SKScene, SKPhysicsContactDelegate {
         body.affectedByGravity = false
         body.allowsRotation = false
         body.categoryBitMask = PhysicsCategory.player
-        body.contactTestBitMask = PhysicsCategory.obstacle | PhysicsCategory.coin
+        body.contactTestBitMask = PhysicsCategory.obstacle | PhysicsCategory.coin | PhysicsCategory.heart
         body.collisionBitMask = 0
         playerNode.physicsBody = body
 
@@ -350,6 +353,54 @@ final class GameScene: SKScene, SKPhysicsContactDelegate {
                 .run { [weak self] in self?.spawnCoin(rail: coinRail) }
             ]))
         }
+
+        if let state, state.lives < GameState.maxLives, Double.random(in: 0...1) < 0.04 {
+            let heartRail = Rail.random()
+            let delay = Double.random(in: 0.30...0.65)
+            run(.sequence([
+                .wait(forDuration: delay),
+                .run { [weak self] in self?.spawnHeart(rail: heartRail) }
+            ]))
+        }
+    }
+
+    private func spawnHeart(rail: Rail) {
+        let railX = x(for: rail)
+        let heart = SKNode()
+        heart.name = "heart"
+        heart.position = CGPoint(x: railX, y: size.height + 40)
+        heart.zPosition = 6
+
+        let glow = SKShapeNode(circleOfRadius: 18)
+        glow.fillColor = Theme.heart.withAlphaComponent(0.30)
+        glow.strokeColor = .clear
+        glow.blendMode = .add
+        heart.addChild(glow)
+
+        let sprite = SKSpriteNode(texture: makeHeartTexture(color: Theme.heart, pointSize: 22))
+        heart.addChild(sprite)
+
+        let body = SKPhysicsBody(circleOfRadius: 13)
+        body.isDynamic = true
+        body.affectedByGravity = false
+        body.categoryBitMask = PhysicsCategory.heart
+        body.contactTestBitMask = PhysicsCategory.player
+        body.collisionBitMask = 0
+        heart.physicsBody = body
+
+        addChild(heart)
+
+        let fall = SKAction.moveTo(y: -40, duration: currentFallDuration() * 1.2)
+        heart.run(.sequence([fall, .removeFromParent()]))
+    }
+
+    private func makeHeartTexture(color: SKColor, pointSize: CGFloat) -> SKTexture {
+        let config = UIImage.SymbolConfiguration(pointSize: pointSize, weight: .black)
+        if let image = UIImage(systemName: "heart.fill", withConfiguration: config)?
+            .withTintColor(color, renderingMode: .alwaysOriginal) {
+            return SKTexture(image: image)
+        }
+        return SKTexture.radialDot(radius: pointSize / 2, color: color)
     }
 
     private func spawnCoin(rail: Rail) {
@@ -426,13 +477,15 @@ final class GameScene: SKScene, SKPhysicsContactDelegate {
         guard !isGameOver else { return }
         let bodies = [contact.bodyA, contact.bodyB]
         if let coinBody = bodies.first(where: { $0.categoryBitMask == PhysicsCategory.coin }) {
-            collect(coinBody.node)
-        } else {
-            triggerGameOver()
+            collectCoin(coinBody.node)
+        } else if let heartBody = bodies.first(where: { $0.categoryBitMask == PhysicsCategory.heart }) {
+            collectHeart(heartBody.node)
+        } else if !isInvincible {
+            takeDamage()
         }
     }
 
-    private func collect(_ node: SKNode?) {
+    private func collectCoin(_ node: SKNode?) {
         guard let node else { return }
         node.physicsBody = nil
         state?.addCoins(1)
@@ -445,22 +498,79 @@ final class GameScene: SKScene, SKPhysicsContactDelegate {
         node.run(.sequence([pop, .removeFromParent()]))
     }
 
-    private func triggerGameOver() {
+    private func collectHeart(_ node: SKNode?) {
+        guard let node else { return }
+        node.physicsBody = nil
+        state?.addLife()
+        Haptics.tap()
+        AudioManager.shared.playCoin()
+        let pop = SKAction.group([
+            .scale(to: 2.2, duration: 0.22),
+            .fadeOut(withDuration: 0.22)
+        ])
+        node.run(.sequence([pop, .removeFromParent()]))
+    }
+
+    private func takeDamage() {
+        guard let state else { return }
+        let stillAlive = state.loseLife()
+        if isOnFire { exitFire() }
+        Haptics.crash()
+        AudioManager.shared.playCrash()
+        shakeScreen(intensity: stillAlive ? 14 : 22)
+
+        if stillAlive {
+            startInvincibility()
+            flashDamage()
+        } else {
+            finishGame()
+        }
+    }
+
+    private func startInvincibility() {
+        isInvincible = true
+        let blink = SKAction.sequence([
+            .fadeAlpha(to: 0.25, duration: 0.08),
+            .fadeAlpha(to: 1.0, duration: 0.08)
+        ])
+        let blinks = SKAction.repeat(blink, count: 6)
+        let restore = SKAction.fadeAlpha(to: 1.0, duration: 0)
+        playerNode.run(.sequence([blinks, restore]))
+
+        run(.sequence([
+            .wait(forDuration: invincibilityDuration),
+            .run { [weak self] in self?.isInvincible = false }
+        ]))
+    }
+
+    private func flashDamage() {
+        let flash = SKSpriteNode(color: Theme.heart, size: size)
+        flash.anchorPoint = .zero
+        flash.alpha = 0
+        flash.blendMode = .add
+        flash.zPosition = -30
+        addChild(flash)
+        flash.run(.sequence([
+            .fadeAlpha(to: 0.28, duration: 0.08),
+            .fadeOut(withDuration: 0.35),
+            .removeFromParent()
+        ]))
+    }
+
+    private func finishGame() {
         isGameOver = true
         removeAction(forKey: spawnActionKey)
         children
             .filter {
                 let cat = $0.physicsBody?.categoryBitMask
-                return cat == PhysicsCategory.obstacle || cat == PhysicsCategory.coin
+                return cat == PhysicsCategory.obstacle
+                    || cat == PhysicsCategory.coin
+                    || cat == PhysicsCategory.heart
             }
             .forEach { $0.removeAllActions() }
         trail?.particleBirthRate = 0
         playerNode.run(.fadeAlpha(to: 0.3, duration: 0.2))
-        if isOnFire { exitFire() }
-        Haptics.crash()
-        AudioManager.shared.playCrash()
         AudioManager.shared.stopMusic()
-        shakeScreen()
         state?.endGame()
     }
 
@@ -468,15 +578,19 @@ final class GameScene: SKScene, SKPhysicsContactDelegate {
 
     func restart() {
         isGameOver = false
+        isInvincible = false
         children
             .filter {
                 let cat = $0.physicsBody?.categoryBitMask
-                return cat == PhysicsCategory.obstacle || cat == PhysicsCategory.coin
+                return cat == PhysicsCategory.obstacle
+                    || cat == PhysicsCategory.coin
+                    || cat == PhysicsCategory.heart
             }
             .forEach { $0.removeFromParent() }
 
         currentRail = .mid
         playerNode.removeAllActions()
+        playerNode.alpha = 1.0
         playerNode.position = CGPoint(x: x(for: currentRail), y: playerY)
         trail?.particleBirthRate = 90
 

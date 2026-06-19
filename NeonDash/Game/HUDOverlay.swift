@@ -5,7 +5,10 @@ struct HUDOverlay: View {
 
     var body: some View {
         ZStack(alignment: .top) {
-            HStack {
+            HStack(alignment: .top) {
+                heartsRow
+                    .padding(.leading, 18)
+                    .padding(.top, 14)
                 Spacer()
                 HStack(spacing: 6) {
                     Circle()
@@ -24,6 +27,27 @@ struct HUDOverlay: View {
             scoreStack
         }
         .allowsHitTesting(false)
+    }
+
+    private var heartsRow: some View {
+        HStack(spacing: 4) {
+            ForEach(0..<GameState.maxLives, id: \.self) { i in
+                Image(systemName: i < state.lives ? "heart.fill" : "heart")
+                    .font(.system(size: 16, weight: .black))
+                    .foregroundStyle(
+                        i < state.lives
+                            ? Color(red: 1, green: 0.28, blue: 0.42)
+                            : Color.white.opacity(0.22)
+                    )
+                    .shadow(
+                        color: i < state.lives
+                            ? Color(red: 1, green: 0.28, blue: 0.42).opacity(0.7)
+                            : .clear,
+                        radius: 5
+                    )
+            }
+        }
+        .animation(.easeOut(duration: 0.25), value: state.lives)
     }
 
     private var scoreStack: some View {

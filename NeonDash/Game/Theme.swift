@@ -39,6 +39,7 @@ enum Theme {
     static let coin = SKColor(red: 1.00, green: 0.85, blue: 0.25, alpha: 1)
     static let fire = SKColor(red: 1.00, green: 0.38, blue: 0.10, alpha: 1)
     static let fireBright = SKColor(red: 1.00, green: 0.78, blue: 0.20, alpha: 1)
+    static let heart = SKColor(red: 1.00, green: 0.28, blue: 0.42, alpha: 1)
 
     /// Layered halo + solid core for a cheap neon glow.
     static func glowingCircle(radius: CGFloat, color: SKColor) -> SKNode {
