@@ -3,7 +3,7 @@ import AVFoundation
 final class AudioManager {
     static let shared = AudioManager()
 
-    private let mainTrackNames: [String] = (1...5).map { "bgm_main_\(String(format: "%02d", $0))" }
+    private let mainTrackName = "bgm_main"
     private let fireTrackName = "bgm_fire"
 
     private let mainVolume: Float = 0.7
@@ -24,8 +24,7 @@ final class AudioManager {
 
     func startMainMusic() {
         guard !isMuted else { return }
-        let pick = mainTrackNames.shuffled().first ?? mainTrackNames[0]
-        guard let player = makePlayer(named: pick, volume: 0) else { return }
+        guard let player = makePlayer(named: mainTrackName, volume: 0) else { return }
         player.numberOfLoops = -1
         player.play()
         player.setVolume(mainVolume, fadeDuration: crossfade)
