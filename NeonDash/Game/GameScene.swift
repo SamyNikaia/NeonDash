@@ -44,9 +44,11 @@ final class GameScene: SKScene, SKPhysicsContactDelegate {
         var speedMultiplier: Double {
             switch self {
             case .standard, .long: return 1.0
-            case .fast: return 1.7
+            case .fast: return 1.35
             }
         }
+
+        var isRainbow: Bool { self == .fast }
     }
 
     private let playerRadius: CGFloat = 14
@@ -394,6 +396,19 @@ final class GameScene: SKScene, SKPhysicsContactDelegate {
         heart.run(.sequence([fall, .removeFromParent()]))
     }
 
+    private func applyRainbowCycle(to node: SKNode, period: TimeInterval) {
+        let shapes = node.children.compactMap { $0 as? SKShapeNode }
+        let alphas = shapes.map { CGFloat($0.fillColor.cgColor.alpha) }
+        let cycle = SKAction.customAction(withDuration: period) { _, elapsed in
+            let t = (Double(elapsed) / period).truncatingRemainder(dividingBy: 1.0)
+            let color = SKColor(hue: CGFloat(t), saturation: 1.0, brightness: 1.0, alpha: 1)
+            for (shape, alpha) in zip(shapes, alphas) {
+                shape.fillColor = color.withAlphaComponent(alpha)
+            }
+        }
+        node.run(.repeatForever(cycle), withKey: "rainbow")
+    }
+
     private func makeHeartTexture(color: SKColor, pointSize: CGFloat) -> SKTexture {
         let config = UIImage.SymbolConfiguration(pointSize: pointSize, weight: .black)
         if let image = UIImage(systemName: "heart.fill", withConfiguration: config)?
@@ -450,7 +465,11 @@ final class GameScene: SKScene, SKPhysicsContactDelegate {
         let obstacle = SKNode()
         obstacle.position = CGPoint(x: railX, y: size.height + 60)
         obstacle.zPosition = 5
-        obstacle.addChild(Theme.glowingBar(size: barSize, color: variant.color))
+        let bar = Theme.glowingBar(size: barSize, color: variant.color)
+        obstacle.addChild(bar)
+        if variant.isRainbow {
+            applyRainbowCycle(to: bar, period: 0.85)
+        }
 
         let body = SKPhysicsBody(rectangleOf: barSize)
         body.isDynamic = true
