@@ -63,8 +63,11 @@ struct HUDOverlay: View {
                 .foregroundStyle(.white)
                 .shadow(color: .white.opacity(0.4), radius: 8)
 
-            if state.isOnFire {
-                FirePill()
+            if state.isRocketActive {
+                StatusPill(text: "ROCKET", color: Color(red: 0.55, green: 0.95, blue: 1.00))
+                    .transition(.scale.combined(with: .opacity))
+            } else if state.isOnFire {
+                StatusPill(text: "ON FIRE", color: Color(red: 1.0, green: 0.38, blue: 0.10))
                     .transition(.scale.combined(with: .opacity))
             }
 
@@ -89,12 +92,15 @@ struct HUDOverlay: View {
         .frame(maxWidth: .infinity, alignment: .top)
         .animation(.spring(response: 0.3, dampingFraction: 0.7), value: state.multiplier)
         .animation(.easeOut(duration: 0.25), value: state.isOnFire)
+        .animation(.easeOut(duration: 0.25), value: state.isRocketActive)
     }
 
-    private struct FirePill: View {
+    private struct StatusPill: View {
+        let text: String
+        let color: Color
         @State private var pulse: CGFloat = 1.0
         var body: some View {
-            Text("ON FIRE")
+            Text(text)
                 .font(.system(size: 12, weight: .black, design: .rounded))
                 .tracking(5)
                 .foregroundStyle(.white)
@@ -102,8 +108,8 @@ struct HUDOverlay: View {
                 .padding(.vertical, 5)
                 .background(
                     Capsule()
-                        .fill(Color(red: 1.0, green: 0.38, blue: 0.10))
-                        .shadow(color: Color(red: 1.0, green: 0.38, blue: 0.10).opacity(0.8), radius: 10)
+                        .fill(color)
+                        .shadow(color: color.opacity(0.8), radius: 10)
                 )
                 .scaleEffect(pulse)
                 .onAppear {

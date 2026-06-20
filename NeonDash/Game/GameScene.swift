@@ -20,6 +20,7 @@ final class GameScene: SKScene, SKPhysicsContactDelegate {
         static let obstacle: UInt32 = 1 << 1
         static let coin: UInt32 = 1 << 2
         static let heart: UInt32 = 1 << 3
+        static let rocket: UInt32 = 1 << 4
     }
 
     private enum ObstacleVariant {
@@ -73,6 +74,9 @@ final class GameScene: SKScene, SKPhysicsContactDelegate {
     private var isOnFire: Bool = false
     private var isInvincible: Bool = false
     private let invincibilityDuration: TimeInterval = 1.0
+    private var rocketShield: SKNode?
+    private let rocketDuration: TimeInterval = 6.0
+    private let rocketActionKey = "rocketTimer"
 
     weak var state: GameState?
 
@@ -185,7 +189,10 @@ final class GameScene: SKScene, SKPhysicsContactDelegate {
         body.affectedByGravity = false
         body.allowsRotation = false
         body.categoryBitMask = PhysicsCategory.player
-        body.contactTestBitMask = PhysicsCategory.obstacle | PhysicsCategory.coin | PhysicsCategory.heart
+        body.contactTestBitMask = PhysicsCategory.obstacle
+            | PhysicsCategory.coin
+            | PhysicsCategory.heart
+            | PhysicsCategory.rocket
         body.collisionBitMask = 0
         playerNode.physicsBody = body
 
@@ -386,6 +393,55 @@ final class GameScene: SKScene, SKPhysicsContactDelegate {
                 .run { [weak self] in self?.spawnHeart(rail: heartRail) }
             ]))
         }
+
+        if !(state?.isRocketActive ?? false), Double.random(in: 0...1) < 0.02 {
+            let rocketRail = Rail.random()
+            let delay = Double.random(in: 0.35...0.70)
+            run(.sequence([
+                .wait(forDuration: delay),
+                .run { [weak self] in self?.spawnRocket(rail: rocketRail) }
+            ]))
+        }
+    }
+
+    private func spawnRocket(rail: Rail) {
+        let railX = x(for: rail)
+        let rocket = SKNode()
+        rocket.name = "rocket"
+        rocket.position = CGPoint(x: railX, y: size.height + 40)
+        rocket.zPosition = 6
+
+        let glow = SKShapeNode(circleOfRadius: 22)
+        glow.fillColor = Theme.rocket.withAlphaComponent(0.35)
+        glow.strokeColor = .clear
+        glow.blendMode = .add
+        rocket.addChild(glow)
+
+        let sprite = SKSpriteNode(texture: makeBoltTexture(color: Theme.rocket, pointSize: 24))
+        rocket.addChild(sprite)
+
+        let body = SKPhysicsBody(circleOfRadius: 15)
+        body.isDynamic = true
+        body.affectedByGravity = false
+        body.categoryBitMask = PhysicsCategory.rocket
+        body.contactTestBitMask = PhysicsCategory.player
+        body.collisionBitMask = 0
+        rocket.physicsBody = body
+
+        addChild(rocket)
+        sprite.run(.repeatForever(.rotate(byAngle: .pi * 2, duration: 1.2)))
+
+        let fall = SKAction.moveTo(y: -40, duration: currentFallDuration() * 1.1)
+        rocket.run(.sequence([fall, .removeFromParent()]))
+    }
+
+    private func makeBoltTexture(color: SKColor, pointSize: CGFloat) -> SKTexture {
+        let config = UIImage.SymbolConfiguration(pointSize: pointSize, weight: .black)
+        if let image = UIImage(systemName: "bolt.fill", withConfiguration: config)?
+            .withTintColor(color, renderingMode: .alwaysOriginal) {
+            return SKTexture(image: image)
+        }
+        return SKTexture.radialDot(radius: pointSize / 2, color: color)
     }
 
     private func spawnHeart(rail: Rail) {
@@ -521,8 +577,14 @@ final class GameScene: SKScene, SKPhysicsContactDelegate {
             collectCoin(coinBody.node)
         } else if let heartBody = bodies.first(where: { $0.categoryBitMask == PhysicsCategory.heart }) {
             collectHeart(heartBody.node)
-        } else if !isInvincible {
-            takeDamage()
+        } else if let rocketBody = bodies.first(where: { $0.categoryBitMask == PhysicsCategory.rocket }) {
+            collectRocket(rocketBody.node)
+        } else if let obstacleBody = bodies.first(where: { $0.categoryBitMask == PhysicsCategory.obstacle }) {
+            if state?.isRocketActive ?? false {
+                destroyObstacle(obstacleBody.node)
+            } else if !isInvincible {
+                takeDamage()
+            }
         }
     }
 
@@ -550,6 +612,78 @@ final class GameScene: SKScene, SKPhysicsContactDelegate {
             .fadeOut(withDuration: 0.22)
         ])
         node.run(.sequence([pop, .removeFromParent()]))
+    }
+
+    private func collectRocket(_ node: SKNode?) {
+        guard let node else { return }
+        node.physicsBody = nil
+        Haptics.crash()
+        AudioManager.shared.playCoin()
+        let pop = SKAction.group([
+            .scale(to: 2.6, duration: 0.20),
+            .fadeOut(withDuration: 0.20)
+        ])
+        node.run(.sequence([pop, .removeFromParent()]))
+        activateRocket()
+    }
+
+    private func activateRocket() {
+        state?.isRocketActive = true
+        isInvincible = true
+
+        rocketShield?.removeFromParent()
+        let shield = SKNode()
+        let ring = SKShapeNode(circleOfRadius: 30)
+        ring.strokeColor = Theme.rocket
+        ring.lineWidth = 2.5
+        ring.fillColor = Theme.rocket.withAlphaComponent(0.10)
+        ring.glowWidth = 6
+        ring.blendMode = .add
+        shield.addChild(ring)
+        let halo = SKShapeNode(circleOfRadius: 38)
+        halo.fillColor = Theme.rocket.withAlphaComponent(0.18)
+        halo.strokeColor = .clear
+        halo.blendMode = .add
+        shield.addChild(halo)
+        shield.run(.repeatForever(.rotate(byAngle: .pi * 2, duration: 1.4)))
+        playerNode.addChild(shield)
+        rocketShield = shield
+
+        trail?.particleColor = Theme.rocket
+        trail?.particleBirthRate = 260
+
+        removeAction(forKey: rocketActionKey)
+        run(.sequence([
+            .wait(forDuration: rocketDuration),
+            .run { [weak self] in self?.deactivateRocket() }
+        ]), withKey: rocketActionKey)
+    }
+
+    private func deactivateRocket() {
+        state?.isRocketActive = false
+        isInvincible = false
+        rocketShield?.run(.sequence([.fadeOut(withDuration: 0.3), .removeFromParent()]))
+        rocketShield = nil
+
+        if isOnFire {
+            trail?.particleColor = Theme.fire
+            trail?.particleBirthRate = 200
+        } else {
+            trail?.particleColor = state?.equippedBall.color ?? Theme.player
+            trail?.particleBirthRate = 90
+        }
+    }
+
+    private func destroyObstacle(_ node: SKNode?) {
+        guard let node else { return }
+        node.physicsBody = nil
+        state?.addPoint()
+        let burst = SKAction.group([
+            .scale(to: 1.6, duration: 0.18),
+            .fadeOut(withDuration: 0.18)
+        ])
+        node.run(.sequence([burst, .removeFromParent()]))
+        Haptics.tap()
     }
 
     private func takeDamage() {
@@ -601,16 +735,21 @@ final class GameScene: SKScene, SKPhysicsContactDelegate {
     private func finishGame() {
         isGameOver = true
         removeAction(forKey: spawnActionKey)
+        removeAction(forKey: rocketActionKey)
         children
             .filter {
                 let cat = $0.physicsBody?.categoryBitMask
                 return cat == PhysicsCategory.obstacle
                     || cat == PhysicsCategory.coin
                     || cat == PhysicsCategory.heart
+                    || cat == PhysicsCategory.rocket
             }
             .forEach { $0.removeAllActions() }
         trail?.particleBirthRate = 0
         playerNode.run(.fadeAlpha(to: 0.3, duration: 0.2))
+        rocketShield?.removeFromParent()
+        rocketShield = nil
+        state?.isRocketActive = false
         AudioManager.shared.stopMusic()
         state?.endGame()
     }
@@ -620,12 +759,16 @@ final class GameScene: SKScene, SKPhysicsContactDelegate {
     func restart() {
         isGameOver = false
         isInvincible = false
+        removeAction(forKey: rocketActionKey)
+        rocketShield?.removeFromParent()
+        rocketShield = nil
         children
             .filter {
                 let cat = $0.physicsBody?.categoryBitMask
                 return cat == PhysicsCategory.obstacle
                     || cat == PhysicsCategory.coin
                     || cat == PhysicsCategory.heart
+                    || cat == PhysicsCategory.rocket
             }
             .forEach { $0.removeFromParent() }
 

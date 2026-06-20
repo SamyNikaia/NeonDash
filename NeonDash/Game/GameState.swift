@@ -17,6 +17,8 @@ final class GameState: ObservableObject {
     @Published private(set) var equippedBallId: String
     @Published private(set) var equippedBackgroundId: String
 
+    @Published var isRocketActive: Bool = false
+
     private let defaults: UserDefaults
     private let bestKey = "neondash.bestScore"
     private let coinsKey = "neondash.coins"
@@ -72,6 +74,7 @@ final class GameState: ObservableObject {
         lives = Self.maxLives
         isGameOver = false
         isNewBest = false
+        isRocketActive = false
         bestAtRunStart = best
     }
 
