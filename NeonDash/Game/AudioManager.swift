@@ -20,7 +20,7 @@ final class AudioManager {
         configureSession()
     }
 
-    // MARK: - Public API
+    // MARK: - API publique
 
     func startMainMusic() {
         guard !isMuted else { return }
@@ -68,7 +68,7 @@ final class AudioManager {
         if muted { stopMusic() }
     }
 
-    // MARK: - Internals
+    // MARK: - Détails internes
 
     private func configureSession() {
         do {

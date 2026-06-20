@@ -2,6 +2,8 @@ import SpriteKit
 
 final class GameScene: SKScene, SKPhysicsContactDelegate {
 
+    // MARK: - Types
+
     enum Rail: Int, CaseIterable {
         case left = 0, mid = 1, right = 2
 
@@ -16,11 +18,11 @@ final class GameScene: SKScene, SKPhysicsContactDelegate {
     }
 
     private enum PhysicsCategory {
-        static let player: UInt32 = 1 << 0
+        static let player: UInt32   = 1 << 0
         static let obstacle: UInt32 = 1 << 1
-        static let coin: UInt32 = 1 << 2
-        static let heart: UInt32 = 1 << 3
-        static let rocket: UInt32 = 1 << 4
+        static let coin: UInt32     = 1 << 2
+        static let heart: UInt32    = 1 << 3
+        static let rocket: UInt32   = 1 << 4
     }
 
     private enum ObstacleVariant {
@@ -52,33 +54,42 @@ final class GameScene: SKScene, SKPhysicsContactDelegate {
         var isRainbow: Bool { self == .fast }
     }
 
+    // MARK: - Constantes
+
     private let playerRadius: CGFloat = 14
-    private let playerNode = SKNode()
-    private var currentRail: Rail = .mid
-    private var railXs: [CGFloat] = []
     private let playerY: CGFloat = 160
     private let switchDuration: TimeInterval = 0.12
 
-    private let spawnActionKey = "spawn"
     private let baseSpawnInterval: TimeInterval = 0.9
     private let minSpawnInterval: TimeInterval = 0.40
     private let baseFallDuration: TimeInterval = 2.0
     private let minFallDuration: TimeInterval = 1.0
     private let rampScoreCeiling: Double = 80
+
+    private let invincibilityDuration: TimeInterval = 1.0
+    private let rocketDuration: TimeInterval = 6.0
+
+    private let spawnActionKey = "spawn"
+    private let rocketActionKey = "rocketTimer"
+
+    // MARK: - État
+
+    private let playerNode = SKNode()
+    private var currentRail: Rail = .mid
+    private var railXs: [CGFloat] = []
     private var isGameOver = false
+    private var isInvincible = false
 
     private var trail: SKEmitterNode?
     private var backgroundNode: SKSpriteNode?
     private var currentPaletteIndex: Int = 0
     private var fireOverlay: SKSpriteNode?
     private var isOnFire: Bool = false
-    private var isInvincible: Bool = false
-    private let invincibilityDuration: TimeInterval = 1.0
     private var rocketShield: SKNode?
-    private let rocketDuration: TimeInterval = 6.0
-    private let rocketActionKey = "rocketTimer"
 
     weak var state: GameState?
+
+    // MARK: - Cycle de vie
 
     override func didMove(to view: SKView) {
         backgroundColor = .black
@@ -88,6 +99,7 @@ final class GameScene: SKScene, SKPhysicsContactDelegate {
         physicsWorld.gravity = .zero
         physicsWorld.contactDelegate = self
 
+        // Caméra dédiée — sert juste pour les screenshakes et le jitter en mode fire.
         let cam = SKCameraNode()
         cam.position = CGPoint(x: size.width / 2, y: size.height / 2)
         addChild(cam)
@@ -102,62 +114,19 @@ final class GameScene: SKScene, SKPhysicsContactDelegate {
         playIntro()
     }
 
-    private func playIntro() {
-        playerNode.setScale(0)
-        playerNode.alpha = 0
-        let pop = SKAction.group([
-            .scale(to: 1.15, duration: 0.28),
-            .fadeIn(withDuration: 0.28)
-        ])
-        pop.timingMode = .easeOut
-        let settle = SKAction.scale(to: 1.0, duration: 0.12)
-        let startSpawn = SKAction.run { [weak self] in self?.startSpawning() }
-        playerNode.run(.sequence([pop, settle]))
-        run(.sequence([.wait(forDuration: 0.55), startSpawn]))
+    override func update(_ currentTime: TimeInterval) {
+        guard !isGameOver else { return }
+        updatePaletteForScore()
+        updateFireState()
     }
 
-    // MARK: - World
-
-    private func currentPalettes() -> [Theme.BackgroundPalette] {
-        state?.equippedBackground.palettes ?? Theme.palettes
-    }
+    // MARK: - Construction de la scène
 
     private func buildBackground() {
         currentPaletteIndex = 0
         let bg = makeBackgroundNode(for: currentPalettes()[0])
         addChild(bg)
         backgroundNode = bg
-    }
-
-    private func makeBackgroundNode(for palette: Theme.BackgroundPalette) -> SKSpriteNode {
-        let texture = SKTexture.verticalGradient(top: palette.top, bottom: palette.bottom, size: size)
-        let node = SKSpriteNode(texture: texture, size: size)
-        node.anchorPoint = .zero
-        node.zPosition = -100
-        return node
-    }
-
-    private func updatePaletteForScore() {
-        let score = state?.score ?? 0
-        let newIndex = Theme.paletteThresholds
-            .enumerated()
-            .last(where: { $0.element <= score })?.offset ?? 0
-        guard newIndex != currentPaletteIndex else { return }
-        currentPaletteIndex = newIndex
-        transitionToPalette(currentPalettes()[newIndex])
-    }
-
-    private func transitionToPalette(_ palette: Theme.BackgroundPalette) {
-        let newBg = makeBackgroundNode(for: palette)
-        newBg.zPosition = -99
-        newBg.alpha = 0
-        addChild(newBg)
-        let old = backgroundNode
-        backgroundNode = newBg
-        newBg.run(.fadeIn(withDuration: 0.8)) {
-            newBg.zPosition = -100
-            old?.removeFromParent()
-        }
     }
 
     private func buildRails() {
@@ -171,18 +140,13 @@ final class GameScene: SKScene, SKPhysicsContactDelegate {
         }
     }
 
-    private func x(for rail: Rail) -> CGFloat {
-        railXs[rail.rawValue]
-    }
-
     private func buildPlayer() {
         currentRail = .mid
         playerNode.position = CGPoint(x: x(for: currentRail), y: playerY)
         playerNode.zPosition = 10
 
         let ballColor = state?.equippedBall.color ?? Theme.player
-        let visual = Theme.glowingCircle(radius: playerRadius, color: ballColor)
-        playerNode.addChild(visual)
+        playerNode.addChild(Theme.glowingCircle(radius: playerRadius, color: ballColor))
 
         let body = SKPhysicsBody(circleOfRadius: playerRadius)
         body.isDynamic = true
@@ -215,18 +179,398 @@ final class GameScene: SKScene, SKPhysicsContactDelegate {
         emitter.particleScaleSpeed = -1.2
         emitter.particleAlpha = 0.9
         emitter.particleAlphaSpeed = -2.4
-        emitter.position = CGPoint(x: 0, y: 0)
         emitter.zPosition = -1
         return emitter
     }
 
-    // MARK: - Per-frame
-
-    override func update(_ currentTime: TimeInterval) {
-        guard !isGameOver else { return }
-        updatePaletteForScore()
-        updateFireState()
+    // Petite intro : la bille pop, puis on attend un demi-tour avant de faire
+    // tomber des obstacles. Sinon le joueur se prend un truc avant même de capter.
+    private func playIntro() {
+        playerNode.setScale(0)
+        playerNode.alpha = 0
+        let pop = SKAction.group([
+            .scale(to: 1.15, duration: 0.28),
+            .fadeIn(withDuration: 0.28)
+        ])
+        pop.timingMode = .easeOut
+        let settle = SKAction.scale(to: 1.0, duration: 0.12)
+        playerNode.run(.sequence([pop, settle]))
+        run(.sequence([
+            .wait(forDuration: 0.55),
+            .run { [weak self] in self?.startSpawning() }
+        ]))
     }
+
+    // MARK: - Saisie
+
+    override func touchesBegan(_ touches: Set<UITouch>, with event: UIEvent?) {
+        guard !isGameOver, let touch = touches.first else { return }
+        let direction = touch.location(in: self).x < size.width / 2 ? -1 : 1
+        switchRail(direction: direction)
+    }
+
+    private func switchRail(direction: Int) {
+        let target = currentRail.shifted(direction)
+        guard target != currentRail else { return }
+        currentRail = target
+        let move = SKAction.moveTo(x: x(for: currentRail), duration: switchDuration)
+        move.timingMode = .easeOut
+        playerNode.run(move)
+        Haptics.tap()
+        AudioManager.shared.playSwitch()
+    }
+
+    private func x(for rail: Rail) -> CGFloat { railXs[rail.rawValue] }
+
+    // MARK: - Difficulté
+
+    private func difficultyT() -> Double {
+        let score = Double(state?.score ?? 0)
+        return min(score / rampScoreCeiling, 1.0)
+    }
+
+    private func currentSpawnInterval() -> TimeInterval {
+        let t = difficultyT()
+        return baseSpawnInterval - (baseSpawnInterval - minSpawnInterval) * t
+    }
+
+    private func currentFallDuration() -> TimeInterval {
+        let t = difficultyT()
+        return baseFallDuration - (baseFallDuration - minFallDuration) * t
+    }
+
+    // MARK: - Obstacles
+
+    private func startSpawning() { scheduleNextSpawn() }
+
+    // Boucle auto-récurrente : chaque cycle relit la vitesse courante,
+    // ce qui permet à la difficulté de ramp en live sans tout réinitialiser.
+    private func scheduleNextSpawn() {
+        guard !isGameOver else { return }
+        let interval = currentSpawnInterval()
+        let wait = SKAction.wait(forDuration: interval, withRange: interval * 0.25)
+        let spawnAndChain = SKAction.run { [weak self] in
+            guard let self, !self.isGameOver else { return }
+            self.spawnObstacle()
+            self.scheduleNextSpawn()
+        }
+        run(.sequence([wait, spawnAndChain]), withKey: spawnActionKey)
+    }
+
+    private func spawnObstacle() {
+        let rail = Rail.random()
+
+        if rollPaired() {
+            // Pattern paire : deux barres séparées de 0.38s sur deux rails
+            // différents, oblige à enchaîner deux switches rapides.
+            spawnBar(rail: rail, variant: .standard)
+            let second = Rail.random(excluding: rail)
+            run(.sequence([
+                .wait(forDuration: 0.38),
+                .run { [weak self] in self?.spawnBar(rail: second, variant: .standard) }
+            ]))
+        } else {
+            spawnBar(rail: rail, variant: pickVariant())
+        }
+
+        rollExtraPickups()
+    }
+
+    private func spawnBar(rail: Rail, variant: ObstacleVariant) {
+        let railX = x(for: rail)
+        let barSize = variant.size
+
+        let obstacle = SKNode()
+        obstacle.position = CGPoint(x: railX, y: size.height + 60)
+        obstacle.zPosition = 5
+        let bar = Theme.glowingBar(size: barSize, color: variant.color)
+        obstacle.addChild(bar)
+        if variant.isRainbow {
+            applyRainbowCycle(to: bar, period: 0.85)
+        }
+
+        let body = SKPhysicsBody(rectangleOf: barSize)
+        body.isDynamic = true
+        body.affectedByGravity = false
+        body.categoryBitMask = PhysicsCategory.obstacle
+        body.contactTestBitMask = PhysicsCategory.player
+        body.collisionBitMask = 0
+        obstacle.physicsBody = body
+
+        addChild(obstacle)
+
+        let duration = currentFallDuration() / variant.speedMultiplier
+        let fall = SKAction.moveTo(y: -60, duration: duration)
+        let award = SKAction.run { [weak self] in
+            guard let self, !self.isGameOver else { return }
+            self.state?.addPoint()
+        }
+        obstacle.run(.sequence([fall, award, .removeFromParent()]))
+    }
+
+    private func pickVariant() -> ObstacleVariant {
+        // Mix des variants qui s'accentue avec le score.
+        let score = state?.score ?? 0
+        let r = Double.random(in: 0...1)
+        switch score {
+        case 0..<15:  return .standard
+        case 15..<35: return r < 0.78 ? .standard : (r < 0.90 ? .long : .fast)
+        case 35..<60: return r < 0.55 ? .standard : (r < 0.78 ? .long : .fast)
+        default:      return r < 0.42 ? .standard : (r < 0.70 ? .long : .fast)
+        }
+    }
+
+    private func rollPaired() -> Bool {
+        let score = state?.score ?? 0
+        guard score >= 25 else { return false }
+        let chance = min(0.10 + Double(score - 25) * 0.003, 0.28)
+        return Double.random(in: 0...1) < chance
+    }
+
+    // MARK: - Pickups
+
+    // Tous les pickups (pièce / cœur / fusée) suivent le même schéma : un
+    // container qui tombe avec un visuel + un body en cercle. Cette méthode
+    // centralise la plomberie pour éviter de recopier 3 fois la même chose.
+    @discardableResult
+    private func spawnPickup(
+        rail: Rail,
+        visual: SKNode,
+        radius: CGFloat,
+        category: UInt32,
+        fallMultiplier: Double = 1.0,
+        name: String? = nil
+    ) -> SKNode {
+        let node = SKNode()
+        node.name = name
+        node.position = CGPoint(x: x(for: rail), y: size.height + 40)
+        node.zPosition = 6
+        node.addChild(visual)
+
+        let body = SKPhysicsBody(circleOfRadius: radius)
+        body.isDynamic = true
+        body.affectedByGravity = false
+        body.categoryBitMask = category
+        body.contactTestBitMask = PhysicsCategory.player
+        body.collisionBitMask = 0
+        node.physicsBody = body
+
+        addChild(node)
+
+        let fall = SKAction.moveTo(y: -40, duration: currentFallDuration() * fallMultiplier)
+        node.run(.sequence([fall, .removeFromParent()]))
+        return node
+    }
+
+    // Les rolls pour les pickups bonus tombent après l'obstacle principal,
+    // avec un petit décalage pour qu'ils ne se chevauchent pas visuellement.
+    private func rollExtraPickups() {
+        if Double.random(in: 0...1) < 0.20 {
+            let coinRail = Rail.random()
+            let delay = Double.random(in: 0.28...0.55)
+            run(.sequence([
+                .wait(forDuration: delay),
+                .run { [weak self] in self?.spawnCoin(rail: coinRail) }
+            ]))
+        }
+
+        if let state, state.lives < GameState.maxLives, Double.random(in: 0...1) < 0.04 {
+            let heartRail = Rail.random()
+            let delay = Double.random(in: 0.30...0.65)
+            run(.sequence([
+                .wait(forDuration: delay),
+                .run { [weak self] in self?.spawnHeart(rail: heartRail) }
+            ]))
+        }
+
+        if !(state?.isRocketActive ?? false), Double.random(in: 0...1) < 0.02 {
+            let rocketRail = Rail.random()
+            let delay = Double.random(in: 0.35...0.70)
+            run(.sequence([
+                .wait(forDuration: delay),
+                .run { [weak self] in self?.spawnRocket(rail: rocketRail) }
+            ]))
+        }
+    }
+
+    // Action color-cycling appliquée aux barres "fast" pour les distinguer.
+    private func applyRainbowCycle(to node: SKNode, period: TimeInterval) {
+        let shapes = node.children.compactMap { $0 as? SKShapeNode }
+        let alphas = shapes.map { CGFloat($0.fillColor.cgColor.alpha) }
+        let cycle = SKAction.customAction(withDuration: period) { _, elapsed in
+            let t = (Double(elapsed) / period).truncatingRemainder(dividingBy: 1.0)
+            let color = SKColor(hue: CGFloat(t), saturation: 1.0, brightness: 1.0, alpha: 1)
+            for (shape, alpha) in zip(shapes, alphas) {
+                shape.fillColor = color.withAlphaComponent(alpha)
+            }
+        }
+        node.run(.repeatForever(cycle), withKey: "rainbow")
+    }
+
+    private func spawnCoin(rail: Rail) {
+        let visual = Theme.glowingCircle(radius: 9, color: Theme.coin)
+        spawnPickup(
+            rail: rail, visual: visual, radius: 11,
+            category: PhysicsCategory.coin,
+            fallMultiplier: 1.15, name: "coin"
+        )
+    }
+
+    private func spawnHeart(rail: Rail) {
+        let visual = SKNode()
+        let glow = SKShapeNode(circleOfRadius: 18)
+        glow.fillColor = Theme.heart.withAlphaComponent(0.30)
+        glow.strokeColor = .clear
+        glow.blendMode = .add
+        visual.addChild(glow)
+        visual.addChild(SKSpriteNode(
+            texture: Theme.symbolTexture(systemName: "heart.fill", color: Theme.heart, pointSize: 22)
+        ))
+        spawnPickup(
+            rail: rail, visual: visual, radius: 13,
+            category: PhysicsCategory.heart,
+            fallMultiplier: 1.2, name: "heart"
+        )
+    }
+
+    private func spawnRocket(rail: Rail) {
+        let visual = SKNode()
+        let glow = SKShapeNode(circleOfRadius: 22)
+        glow.fillColor = Theme.rocket.withAlphaComponent(0.35)
+        glow.strokeColor = .clear
+        glow.blendMode = .add
+        visual.addChild(glow)
+        let sprite = SKSpriteNode(
+            texture: Theme.symbolTexture(systemName: "bolt.fill", color: Theme.rocket, pointSize: 24)
+        )
+        visual.addChild(sprite)
+        sprite.run(.repeatForever(.rotate(byAngle: .pi * 2, duration: 1.2)))
+
+        spawnPickup(
+            rail: rail, visual: visual, radius: 15,
+            category: PhysicsCategory.rocket,
+            fallMultiplier: 1.1, name: "rocket"
+        )
+    }
+
+    // MARK: - Collisions
+
+    func didBegin(_ contact: SKPhysicsContact) {
+        guard !isGameOver else { return }
+        let bodies = [contact.bodyA, contact.bodyB]
+
+        if let coin = bodies.first(where: { $0.categoryBitMask == PhysicsCategory.coin }) {
+            collectCoin(coin.node)
+        } else if let heart = bodies.first(where: { $0.categoryBitMask == PhysicsCategory.heart }) {
+            collectHeart(heart.node)
+        } else if let rocket = bodies.first(where: { $0.categoryBitMask == PhysicsCategory.rocket }) {
+            collectRocket(rocket.node)
+        } else if let obstacle = bodies.first(where: { $0.categoryBitMask == PhysicsCategory.obstacle }) {
+            // En fusée, on plow à travers l'obstacle ; sinon dégât (sauf i-frames).
+            if state?.isRocketActive ?? false {
+                destroyObstacle(obstacle.node)
+            } else if !isInvincible {
+                takeDamage()
+            }
+        }
+    }
+
+    private func collectCoin(_ node: SKNode?) {
+        guard let node else { return }
+        node.physicsBody = nil
+        state?.addCoins(1)
+        Haptics.tap()
+        AudioManager.shared.playCoin()
+        node.run(.sequence([
+            .group([.scale(to: 1.9, duration: 0.18), .fadeOut(withDuration: 0.18)]),
+            .removeFromParent()
+        ]))
+    }
+
+    private func collectHeart(_ node: SKNode?) {
+        guard let node else { return }
+        node.physicsBody = nil
+        state?.addLife()
+        Haptics.tap()
+        AudioManager.shared.playCoin()
+        node.run(.sequence([
+            .group([.scale(to: 2.2, duration: 0.22), .fadeOut(withDuration: 0.22)]),
+            .removeFromParent()
+        ]))
+    }
+
+    private func collectRocket(_ node: SKNode?) {
+        guard let node else { return }
+        node.physicsBody = nil
+        Haptics.crash()
+        AudioManager.shared.playCoin()
+        node.run(.sequence([
+            .group([.scale(to: 2.6, duration: 0.20), .fadeOut(withDuration: 0.20)]),
+            .removeFromParent()
+        ]))
+        activateRocket()
+    }
+
+    private func destroyObstacle(_ node: SKNode?) {
+        guard let node else { return }
+        node.physicsBody = nil
+        state?.addPoint()
+        Haptics.tap()
+        node.run(.sequence([
+            .group([.scale(to: 1.6, duration: 0.18), .fadeOut(withDuration: 0.18)]),
+            .removeFromParent()
+        ]))
+    }
+
+    private func takeDamage() {
+        guard let state else { return }
+        let stillAlive = state.loseLife()
+        if isOnFire { exitFire() }
+        Haptics.crash()
+        AudioManager.shared.playCrash()
+        shakeScreen(intensity: stillAlive ? 14 : 22)
+
+        if stillAlive {
+            startInvincibility()
+            flashDamage()
+        } else {
+            finishGame()
+        }
+    }
+
+    // MARK: - Invincibilité
+
+    private func startInvincibility() {
+        isInvincible = true
+        let blink = SKAction.sequence([
+            .fadeAlpha(to: 0.25, duration: 0.08),
+            .fadeAlpha(to: 1.0, duration: 0.08)
+        ])
+        playerNode.run(.sequence([
+            .repeat(blink, count: 6),
+            .fadeAlpha(to: 1.0, duration: 0)
+        ]))
+        run(.sequence([
+            .wait(forDuration: invincibilityDuration),
+            .run { [weak self] in self?.isInvincible = false }
+        ]))
+    }
+
+    private func flashDamage() {
+        let flash = SKSpriteNode(color: Theme.heart, size: size)
+        flash.anchorPoint = .zero
+        flash.alpha = 0
+        flash.blendMode = .add
+        flash.zPosition = -30
+        addChild(flash)
+        flash.run(.sequence([
+            .fadeAlpha(to: 0.28, duration: 0.08),
+            .fadeOut(withDuration: 0.35),
+            .removeFromParent()
+        ]))
+    }
+
+    // MARK: - Mode Fire
 
     private func updateFireState() {
         let shouldFire = state?.isOnFire ?? false
@@ -273,6 +617,8 @@ final class GameScene: SKScene, SKPhysicsContactDelegate {
         AudioManager.shared.exitFire()
     }
 
+    // Mini jitter continu de la caméra pendant le fire (~4 px). Suffisant
+    // pour que ça respire mais pas au point de gêner la lecture des obstacles.
     private func startFireShake() {
         guard let camera else { return }
         let baseX = size.width / 2
@@ -283,8 +629,7 @@ final class GameScene: SKScene, SKPhysicsContactDelegate {
             let dy = CGFloat.random(in: -3...3)
             camera.position = CGPoint(x: baseX + dx, y: baseY + dy)
         }
-        let cycle = SKAction.sequence([jitter, .wait(forDuration: 0.05)])
-        camera.run(.repeatForever(cycle), withKey: "fireShake")
+        camera.run(.repeatForever(.sequence([jitter, .wait(forDuration: 0.05)])), withKey: "fireShake")
     }
 
     private func stopFireShake() {
@@ -292,340 +637,7 @@ final class GameScene: SKScene, SKPhysicsContactDelegate {
         camera?.run(.move(to: CGPoint(x: size.width / 2, y: size.height / 2), duration: 0.15))
     }
 
-    // MARK: - Input
-
-    override func touchesBegan(_ touches: Set<UITouch>, with event: UIEvent?) {
-        guard !isGameOver else { return }
-        guard let touch = touches.first else { return }
-        let direction = touch.location(in: self).x < size.width / 2 ? -1 : 1
-        switchRail(direction: direction)
-    }
-
-    private func switchRail(direction: Int) {
-        let target = currentRail.shifted(direction)
-        guard target != currentRail else { return }
-        currentRail = target
-        let move = SKAction.moveTo(x: x(for: currentRail), duration: switchDuration)
-        move.timingMode = .easeOut
-        playerNode.run(move)
-        Haptics.tap()
-        AudioManager.shared.playSwitch()
-    }
-
-    private func shakeScreen(intensity: CGFloat = 22) {
-        guard let camera else { return }
-        let center = CGPoint(x: size.width / 2, y: size.height / 2)
-        var actions: [SKAction] = []
-        for _ in 0..<6 {
-            let dx = CGFloat.random(in: -intensity...intensity)
-            let dy = CGFloat.random(in: -intensity...intensity)
-            let step = SKAction.move(to: CGPoint(x: center.x + dx, y: center.y + dy), duration: 0.04)
-            step.timingMode = .easeOut
-            actions.append(step)
-        }
-        actions.append(.move(to: center, duration: 0.06))
-        camera.run(.sequence(actions))
-    }
-
-    // MARK: - Obstacles
-
-    private func startSpawning() {
-        scheduleNextSpawn()
-    }
-
-    private func scheduleNextSpawn() {
-        guard !isGameOver else { return }
-        let interval = currentSpawnInterval()
-        let wait = SKAction.wait(forDuration: interval, withRange: interval * 0.25)
-        let spawnAndChain = SKAction.run { [weak self] in
-            guard let self, !self.isGameOver else { return }
-            self.spawnObstacle()
-            self.scheduleNextSpawn()
-        }
-        run(.sequence([wait, spawnAndChain]), withKey: spawnActionKey)
-    }
-
-    private func difficultyT() -> Double {
-        let score = Double(state?.score ?? 0)
-        return min(score / rampScoreCeiling, 1.0)
-    }
-
-    private func currentSpawnInterval() -> TimeInterval {
-        let t = difficultyT()
-        return baseSpawnInterval - (baseSpawnInterval - minSpawnInterval) * t
-    }
-
-    private func currentFallDuration() -> TimeInterval {
-        let t = difficultyT()
-        return baseFallDuration - (baseFallDuration - minFallDuration) * t
-    }
-
-    private func spawnObstacle() {
-        let rail = Rail.random()
-
-        if rollPaired() {
-            spawnSingle(rail: rail, variant: .standard)
-            let second = Rail.random(excluding: rail)
-            run(.sequence([
-                .wait(forDuration: 0.38),
-                .run { [weak self] in
-                    self?.spawnSingle(rail: second, variant: .standard)
-                }
-            ]))
-        } else {
-            spawnSingle(rail: rail, variant: pickVariant())
-        }
-
-        if Double.random(in: 0...1) < 0.20 {
-            let coinRail = Rail.random()
-            let delay = Double.random(in: 0.28...0.55)
-            run(.sequence([
-                .wait(forDuration: delay),
-                .run { [weak self] in self?.spawnCoin(rail: coinRail) }
-            ]))
-        }
-
-        if let state, state.lives < GameState.maxLives, Double.random(in: 0...1) < 0.04 {
-            let heartRail = Rail.random()
-            let delay = Double.random(in: 0.30...0.65)
-            run(.sequence([
-                .wait(forDuration: delay),
-                .run { [weak self] in self?.spawnHeart(rail: heartRail) }
-            ]))
-        }
-
-        if !(state?.isRocketActive ?? false), Double.random(in: 0...1) < 0.02 {
-            let rocketRail = Rail.random()
-            let delay = Double.random(in: 0.35...0.70)
-            run(.sequence([
-                .wait(forDuration: delay),
-                .run { [weak self] in self?.spawnRocket(rail: rocketRail) }
-            ]))
-        }
-    }
-
-    private func spawnRocket(rail: Rail) {
-        let railX = x(for: rail)
-        let rocket = SKNode()
-        rocket.name = "rocket"
-        rocket.position = CGPoint(x: railX, y: size.height + 40)
-        rocket.zPosition = 6
-
-        let glow = SKShapeNode(circleOfRadius: 22)
-        glow.fillColor = Theme.rocket.withAlphaComponent(0.35)
-        glow.strokeColor = .clear
-        glow.blendMode = .add
-        rocket.addChild(glow)
-
-        let sprite = SKSpriteNode(texture: makeBoltTexture(color: Theme.rocket, pointSize: 24))
-        rocket.addChild(sprite)
-
-        let body = SKPhysicsBody(circleOfRadius: 15)
-        body.isDynamic = true
-        body.affectedByGravity = false
-        body.categoryBitMask = PhysicsCategory.rocket
-        body.contactTestBitMask = PhysicsCategory.player
-        body.collisionBitMask = 0
-        rocket.physicsBody = body
-
-        addChild(rocket)
-        sprite.run(.repeatForever(.rotate(byAngle: .pi * 2, duration: 1.2)))
-
-        let fall = SKAction.moveTo(y: -40, duration: currentFallDuration() * 1.1)
-        rocket.run(.sequence([fall, .removeFromParent()]))
-    }
-
-    private func makeBoltTexture(color: SKColor, pointSize: CGFloat) -> SKTexture {
-        let config = UIImage.SymbolConfiguration(pointSize: pointSize, weight: .black)
-        if let image = UIImage(systemName: "bolt.fill", withConfiguration: config)?
-            .withTintColor(color, renderingMode: .alwaysOriginal) {
-            return SKTexture(image: image)
-        }
-        return SKTexture.radialDot(radius: pointSize / 2, color: color)
-    }
-
-    private func spawnHeart(rail: Rail) {
-        let railX = x(for: rail)
-        let heart = SKNode()
-        heart.name = "heart"
-        heart.position = CGPoint(x: railX, y: size.height + 40)
-        heart.zPosition = 6
-
-        let glow = SKShapeNode(circleOfRadius: 18)
-        glow.fillColor = Theme.heart.withAlphaComponent(0.30)
-        glow.strokeColor = .clear
-        glow.blendMode = .add
-        heart.addChild(glow)
-
-        let sprite = SKSpriteNode(texture: makeHeartTexture(color: Theme.heart, pointSize: 22))
-        heart.addChild(sprite)
-
-        let body = SKPhysicsBody(circleOfRadius: 13)
-        body.isDynamic = true
-        body.affectedByGravity = false
-        body.categoryBitMask = PhysicsCategory.heart
-        body.contactTestBitMask = PhysicsCategory.player
-        body.collisionBitMask = 0
-        heart.physicsBody = body
-
-        addChild(heart)
-
-        let fall = SKAction.moveTo(y: -40, duration: currentFallDuration() * 1.2)
-        heart.run(.sequence([fall, .removeFromParent()]))
-    }
-
-    private func applyRainbowCycle(to node: SKNode, period: TimeInterval) {
-        let shapes = node.children.compactMap { $0 as? SKShapeNode }
-        let alphas = shapes.map { CGFloat($0.fillColor.cgColor.alpha) }
-        let cycle = SKAction.customAction(withDuration: period) { _, elapsed in
-            let t = (Double(elapsed) / period).truncatingRemainder(dividingBy: 1.0)
-            let color = SKColor(hue: CGFloat(t), saturation: 1.0, brightness: 1.0, alpha: 1)
-            for (shape, alpha) in zip(shapes, alphas) {
-                shape.fillColor = color.withAlphaComponent(alpha)
-            }
-        }
-        node.run(.repeatForever(cycle), withKey: "rainbow")
-    }
-
-    private func makeHeartTexture(color: SKColor, pointSize: CGFloat) -> SKTexture {
-        let config = UIImage.SymbolConfiguration(pointSize: pointSize, weight: .black)
-        if let image = UIImage(systemName: "heart.fill", withConfiguration: config)?
-            .withTintColor(color, renderingMode: .alwaysOriginal) {
-            return SKTexture(image: image)
-        }
-        return SKTexture.radialDot(radius: pointSize / 2, color: color)
-    }
-
-    private func spawnCoin(rail: Rail) {
-        let railX = x(for: rail)
-        let coin = SKNode()
-        coin.name = "coin"
-        coin.position = CGPoint(x: railX, y: size.height + 40)
-        coin.zPosition = 6
-        coin.addChild(Theme.glowingCircle(radius: 9, color: Theme.coin))
-
-        let body = SKPhysicsBody(circleOfRadius: 11)
-        body.isDynamic = true
-        body.affectedByGravity = false
-        body.categoryBitMask = PhysicsCategory.coin
-        body.contactTestBitMask = PhysicsCategory.player
-        body.collisionBitMask = 0
-        coin.physicsBody = body
-
-        addChild(coin)
-
-        let fall = SKAction.moveTo(y: -40, duration: currentFallDuration() * 1.15)
-        coin.run(.sequence([fall, .removeFromParent()]))
-    }
-
-    private func pickVariant() -> ObstacleVariant {
-        let score = state?.score ?? 0
-        let r = Double.random(in: 0...1)
-        switch score {
-        case 0..<15: return .standard
-        case 15..<35: return r < 0.78 ? .standard : (r < 0.90 ? .long : .fast)
-        case 35..<60: return r < 0.55 ? .standard : (r < 0.78 ? .long : .fast)
-        default: return r < 0.42 ? .standard : (r < 0.70 ? .long : .fast)
-        }
-    }
-
-    private func rollPaired() -> Bool {
-        let score = state?.score ?? 0
-        guard score >= 25 else { return false }
-        let chance = min(0.10 + Double(score - 25) * 0.003, 0.28)
-        return Double.random(in: 0...1) < chance
-    }
-
-    private func spawnSingle(rail: Rail, variant: ObstacleVariant) {
-        let railX = x(for: rail)
-        let barSize = variant.size
-
-        let obstacle = SKNode()
-        obstacle.position = CGPoint(x: railX, y: size.height + 60)
-        obstacle.zPosition = 5
-        let bar = Theme.glowingBar(size: barSize, color: variant.color)
-        obstacle.addChild(bar)
-        if variant.isRainbow {
-            applyRainbowCycle(to: bar, period: 0.85)
-        }
-
-        let body = SKPhysicsBody(rectangleOf: barSize)
-        body.isDynamic = true
-        body.affectedByGravity = false
-        body.categoryBitMask = PhysicsCategory.obstacle
-        body.contactTestBitMask = PhysicsCategory.player
-        body.collisionBitMask = 0
-        obstacle.physicsBody = body
-
-        addChild(obstacle)
-
-        let duration = currentFallDuration() / variant.speedMultiplier
-        let fall = SKAction.moveTo(y: -60, duration: duration)
-        let award = SKAction.run { [weak self] in
-            guard let self, !self.isGameOver else { return }
-            self.state?.addPoint()
-        }
-        obstacle.run(.sequence([fall, award, .removeFromParent()]))
-    }
-
-    // MARK: - Collision
-
-    func didBegin(_ contact: SKPhysicsContact) {
-        guard !isGameOver else { return }
-        let bodies = [contact.bodyA, contact.bodyB]
-        if let coinBody = bodies.first(where: { $0.categoryBitMask == PhysicsCategory.coin }) {
-            collectCoin(coinBody.node)
-        } else if let heartBody = bodies.first(where: { $0.categoryBitMask == PhysicsCategory.heart }) {
-            collectHeart(heartBody.node)
-        } else if let rocketBody = bodies.first(where: { $0.categoryBitMask == PhysicsCategory.rocket }) {
-            collectRocket(rocketBody.node)
-        } else if let obstacleBody = bodies.first(where: { $0.categoryBitMask == PhysicsCategory.obstacle }) {
-            if state?.isRocketActive ?? false {
-                destroyObstacle(obstacleBody.node)
-            } else if !isInvincible {
-                takeDamage()
-            }
-        }
-    }
-
-    private func collectCoin(_ node: SKNode?) {
-        guard let node else { return }
-        node.physicsBody = nil
-        state?.addCoins(1)
-        Haptics.tap()
-        AudioManager.shared.playCoin()
-        let pop = SKAction.group([
-            .scale(to: 1.9, duration: 0.18),
-            .fadeOut(withDuration: 0.18)
-        ])
-        node.run(.sequence([pop, .removeFromParent()]))
-    }
-
-    private func collectHeart(_ node: SKNode?) {
-        guard let node else { return }
-        node.physicsBody = nil
-        state?.addLife()
-        Haptics.tap()
-        AudioManager.shared.playCoin()
-        let pop = SKAction.group([
-            .scale(to: 2.2, duration: 0.22),
-            .fadeOut(withDuration: 0.22)
-        ])
-        node.run(.sequence([pop, .removeFromParent()]))
-    }
-
-    private func collectRocket(_ node: SKNode?) {
-        guard let node else { return }
-        node.physicsBody = nil
-        Haptics.crash()
-        AudioManager.shared.playCoin()
-        let pop = SKAction.group([
-            .scale(to: 2.6, duration: 0.20),
-            .fadeOut(withDuration: 0.20)
-        ])
-        node.run(.sequence([pop, .removeFromParent()]))
-        activateRocket()
-    }
+    // MARK: - Fusée
 
     private func activateRocket() {
         state?.isRocketActive = true
@@ -665,6 +677,8 @@ final class GameScene: SKScene, SKPhysicsContactDelegate {
         rocketShield?.run(.sequence([.fadeOut(withDuration: 0.3), .removeFromParent()]))
         rocketShield = nil
 
+        // On rebascule le trail soit en mode fire (si toujours en feu),
+        // soit sur la couleur de la skin équipée.
         if isOnFire {
             trail?.particleColor = Theme.fire
             trail?.particleBirthRate = 200
@@ -674,77 +688,69 @@ final class GameScene: SKScene, SKPhysicsContactDelegate {
         }
     }
 
-    private func destroyObstacle(_ node: SKNode?) {
-        guard let node else { return }
-        node.physicsBody = nil
-        state?.addPoint()
-        let burst = SKAction.group([
-            .scale(to: 1.6, duration: 0.18),
-            .fadeOut(withDuration: 0.18)
-        ])
-        node.run(.sequence([burst, .removeFromParent()]))
-        Haptics.tap()
+    // MARK: - Palette de fond
+
+    private func currentPalettes() -> [Theme.BackgroundPalette] {
+        state?.equippedBackground.palettes ?? Theme.palettes
     }
 
-    private func takeDamage() {
-        guard let state else { return }
-        let stillAlive = state.loseLife()
-        if isOnFire { exitFire() }
-        Haptics.crash()
-        AudioManager.shared.playCrash()
-        shakeScreen(intensity: stillAlive ? 14 : 22)
+    private func makeBackgroundNode(for palette: Theme.BackgroundPalette) -> SKSpriteNode {
+        let texture = SKTexture.verticalGradient(top: palette.top, bottom: palette.bottom, size: size)
+        let node = SKSpriteNode(texture: texture, size: size)
+        node.anchorPoint = .zero
+        node.zPosition = -100
+        return node
+    }
 
-        if stillAlive {
-            startInvincibility()
-            flashDamage()
-        } else {
-            finishGame()
+    private func updatePaletteForScore() {
+        let score = state?.score ?? 0
+        let newIndex = Theme.paletteThresholds
+            .enumerated()
+            .last(where: { $0.element <= score })?.offset ?? 0
+        guard newIndex != currentPaletteIndex else { return }
+        currentPaletteIndex = newIndex
+        transitionToPalette(currentPalettes()[newIndex])
+    }
+
+    // Crossfade entre deux sprites de fond (le nouveau pop par-dessus,
+    // l'ancien est viré une fois le fade fini).
+    private func transitionToPalette(_ palette: Theme.BackgroundPalette) {
+        let newBg = makeBackgroundNode(for: palette)
+        newBg.zPosition = -99
+        newBg.alpha = 0
+        addChild(newBg)
+        let old = backgroundNode
+        backgroundNode = newBg
+        newBg.run(.fadeIn(withDuration: 0.8)) {
+            newBg.zPosition = -100
+            old?.removeFromParent()
         }
     }
 
-    private func startInvincibility() {
-        isInvincible = true
-        let blink = SKAction.sequence([
-            .fadeAlpha(to: 0.25, duration: 0.08),
-            .fadeAlpha(to: 1.0, duration: 0.08)
-        ])
-        let blinks = SKAction.repeat(blink, count: 6)
-        let restore = SKAction.fadeAlpha(to: 1.0, duration: 0)
-        playerNode.run(.sequence([blinks, restore]))
+    // MARK: - Effets caméra
 
-        run(.sequence([
-            .wait(forDuration: invincibilityDuration),
-            .run { [weak self] in self?.isInvincible = false }
-        ]))
+    private func shakeScreen(intensity: CGFloat = 22) {
+        guard let camera else { return }
+        let center = CGPoint(x: size.width / 2, y: size.height / 2)
+        var actions: [SKAction] = []
+        for _ in 0..<6 {
+            let dx = CGFloat.random(in: -intensity...intensity)
+            let dy = CGFloat.random(in: -intensity...intensity)
+            let step = SKAction.move(to: CGPoint(x: center.x + dx, y: center.y + dy), duration: 0.04)
+            step.timingMode = .easeOut
+            actions.append(step)
+        }
+        actions.append(.move(to: center, duration: 0.06))
+        camera.run(.sequence(actions))
     }
 
-    private func flashDamage() {
-        let flash = SKSpriteNode(color: Theme.heart, size: size)
-        flash.anchorPoint = .zero
-        flash.alpha = 0
-        flash.blendMode = .add
-        flash.zPosition = -30
-        addChild(flash)
-        flash.run(.sequence([
-            .fadeAlpha(to: 0.28, duration: 0.08),
-            .fadeOut(withDuration: 0.35),
-            .removeFromParent()
-        ]))
-    }
+    // MARK: - Game over / Restart
 
     private func finishGame() {
         isGameOver = true
         removeAction(forKey: spawnActionKey)
         removeAction(forKey: rocketActionKey)
-        children
-            .filter {
-                let cat = $0.physicsBody?.categoryBitMask
-                return cat == PhysicsCategory.obstacle
-                    || cat == PhysicsCategory.coin
-                    || cat == PhysicsCategory.heart
-                    || cat == PhysicsCategory.rocket
-            }
-            .forEach { $0.removeAllActions() }
+        clearGameplayNodes(remove: false)
         trail?.particleBirthRate = 0
         playerNode.run(.fadeAlpha(to: 0.3, duration: 0.2))
         rocketShield?.removeFromParent()
@@ -754,23 +760,13 @@ final class GameScene: SKScene, SKPhysicsContactDelegate {
         state?.endGame()
     }
 
-    // MARK: - Restart
-
     func restart() {
         isGameOver = false
         isInvincible = false
         removeAction(forKey: rocketActionKey)
         rocketShield?.removeFromParent()
         rocketShield = nil
-        children
-            .filter {
-                let cat = $0.physicsBody?.categoryBitMask
-                return cat == PhysicsCategory.obstacle
-                    || cat == PhysicsCategory.coin
-                    || cat == PhysicsCategory.heart
-                    || cat == PhysicsCategory.rocket
-            }
-            .forEach { $0.removeFromParent() }
+        clearGameplayNodes(remove: true)
 
         currentRail = .mid
         playerNode.removeAllActions()
@@ -779,12 +775,32 @@ final class GameScene: SKScene, SKPhysicsContactDelegate {
         trail?.particleBirthRate = 90
 
         if currentPaletteIndex != 0 {
-            transitionToPalette(Theme.palettes[0])
+            transitionToPalette(currentPalettes()[0])
             currentPaletteIndex = 0
         }
 
         state?.reset()
         AudioManager.shared.startMainMusic()
         playIntro()
+    }
+
+    // Sweep des nœuds gameplay (obstacles + pickups). Si `remove` est faux on
+    // se contente de figer les actions (utile à la mort pour laisser la scène
+    // se fixer avant l'écran game over).
+    private func clearGameplayNodes(remove: Bool) {
+        let targets = children.filter {
+            let cat = $0.physicsBody?.categoryBitMask
+            return cat == PhysicsCategory.obstacle
+                || cat == PhysicsCategory.coin
+                || cat == PhysicsCategory.heart
+                || cat == PhysicsCategory.rocket
+        }
+        for node in targets {
+            if remove {
+                node.removeFromParent()
+            } else {
+                node.removeAllActions()
+            }
+        }
     }
 }

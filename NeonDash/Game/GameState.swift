@@ -78,7 +78,7 @@ final class GameState: ObservableObject {
         bestAtRunStart = best
     }
 
-    /// Returns true if the player is still alive after the hit.
+    /// Renvoie true si le joueur a encore au moins une vie après le coup.
     @discardableResult
     func loseLife() -> Bool {
         guard lives > 0 else { return false }
@@ -120,7 +120,7 @@ final class GameState: ObservableObject {
         return true
     }
 
-    // MARK: - Skins
+    // MARK: - Skins (achat + équipement)
 
     @discardableResult
     func purchaseBall(_ id: String) -> Bool {
