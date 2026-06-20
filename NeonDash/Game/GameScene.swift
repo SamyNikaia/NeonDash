@@ -563,12 +563,15 @@ final class GameScene: SKScene, SKPhysicsContactDelegate {
 
     private func enterFire() {
         isOnFire = true
+        // Trail toujours en orange pour la chaleur, mais on bump le débit.
         trail?.particleColor = Theme.fire
         trail?.particleBirthRate = 200
         playerNode.run(.scale(to: 1.25, duration: 0.25))
         AudioManager.shared.enterFire()
 
-        let overlay = SKSpriteNode(color: Theme.fire, size: size)
+        // Overlay rainbow cyclant qui prend la place de l'ancien tint orange.
+        // Le pulse d'alpha tourne en parallèle pour garder un effet "vivant".
+        let overlay = SKSpriteNode(color: .red, size: size)
         overlay.anchorPoint = .zero
         overlay.zPosition = -40
         overlay.blendMode = .add
@@ -576,9 +579,17 @@ final class GameScene: SKScene, SKPhysicsContactDelegate {
         addChild(overlay)
         fireOverlay = overlay
 
+        let cyclePeriod: TimeInterval = 2.2
+        let hueCycle = SKAction.customAction(withDuration: cyclePeriod) { node, elapsed in
+            let t = (Double(elapsed) / cyclePeriod).truncatingRemainder(dividingBy: 1.0)
+            let color = SKColor(hue: CGFloat(t), saturation: 0.85, brightness: 1.0, alpha: 1)
+            (node as? SKSpriteNode)?.color = color
+        }
+        overlay.run(.repeatForever(hueCycle), withKey: "rainbowCycle")
+
         let pulse = SKAction.sequence([
-            .fadeAlpha(to: 0.32, duration: 0.35),
-            .fadeAlpha(to: 0.12, duration: 0.35)
+            .fadeAlpha(to: 0.30, duration: 0.40),
+            .fadeAlpha(to: 0.15, duration: 0.40)
         ])
         overlay.run(.repeatForever(pulse), withKey: "firePulse")
 
@@ -591,6 +602,7 @@ final class GameScene: SKScene, SKPhysicsContactDelegate {
         trail?.particleBirthRate = 90
         playerNode.run(.scale(to: 1.0, duration: 0.25))
         fireOverlay?.removeAction(forKey: "firePulse")
+        fireOverlay?.removeAction(forKey: "rainbowCycle")
         fireOverlay?.run(.sequence([.fadeOut(withDuration: 0.4), .removeFromParent()]))
         fireOverlay = nil
         stopFireShake()
