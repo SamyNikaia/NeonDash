@@ -233,7 +233,7 @@ final class GameScene: SKScene, SKPhysicsContactDelegate {
     private func enterFire() {
         isOnFire = true
         trail?.particleColor = Theme.fire
-        trail?.particleBirthRate = 160
+        trail?.particleBirthRate = 200
         playerNode.run(.scale(to: 1.25, duration: 0.25))
         AudioManager.shared.enterFire()
 
@@ -246,10 +246,12 @@ final class GameScene: SKScene, SKPhysicsContactDelegate {
         fireOverlay = overlay
 
         let pulse = SKAction.sequence([
-            .fadeAlpha(to: 0.18, duration: 0.7),
-            .fadeAlpha(to: 0.08, duration: 0.7)
+            .fadeAlpha(to: 0.32, duration: 0.35),
+            .fadeAlpha(to: 0.12, duration: 0.35)
         ])
         overlay.run(.repeatForever(pulse), withKey: "firePulse")
+
+        startFireShake()
     }
 
     private func exitFire() {
@@ -260,7 +262,27 @@ final class GameScene: SKScene, SKPhysicsContactDelegate {
         fireOverlay?.removeAction(forKey: "firePulse")
         fireOverlay?.run(.sequence([.fadeOut(withDuration: 0.4), .removeFromParent()]))
         fireOverlay = nil
+        stopFireShake()
         AudioManager.shared.exitFire()
+    }
+
+    private func startFireShake() {
+        guard let camera else { return }
+        let baseX = size.width / 2
+        let baseY = size.height / 2
+        let jitter = SKAction.run { [weak camera] in
+            guard let camera else { return }
+            let dx = CGFloat.random(in: -4...4)
+            let dy = CGFloat.random(in: -3...3)
+            camera.position = CGPoint(x: baseX + dx, y: baseY + dy)
+        }
+        let cycle = SKAction.sequence([jitter, .wait(forDuration: 0.05)])
+        camera.run(.repeatForever(cycle), withKey: "fireShake")
+    }
+
+    private func stopFireShake() {
+        camera?.removeAction(forKey: "fireShake")
+        camera?.run(.move(to: CGPoint(x: size.width / 2, y: size.height / 2), duration: 0.15))
     }
 
     // MARK: - Input
