@@ -377,7 +377,9 @@ final class GameScene: SKScene, SKPhysicsContactDelegate {
             ]))
         }
 
-        if !(state?.isRocketActive ?? false), Double.random(in: 0...1) < 0.02 {
+        // Fusée plus généreuse en spawn pour que le joueur la voie effectivement
+        // passer de temps en temps. Pas de spawn si on est déjà en fusée.
+        if !(state?.isRocketActive ?? false), Double.random(in: 0...1) < 0.07 {
             let rocketRail = Rail.random()
             let delay = Double.random(in: 0.35...0.70)
             run(.sequence([
@@ -414,23 +416,30 @@ final class GameScene: SKScene, SKPhysicsContactDelegate {
     }
 
     private func spawnRocket(rail: Rail) {
+        // Sprite plus gros + halo plus large que les autres pickups, et on
+        // ajoute un pulse + une rotation pour que ça attire l'œil tout de suite.
         let visual = SKNode()
-        let glow = SKShapeNode(circleOfRadius: 22)
-        glow.fillColor = Theme.rocket.withAlphaComponent(0.35)
+        let glow = SKShapeNode(circleOfRadius: 32)
+        glow.fillColor = Theme.rocket.withAlphaComponent(0.50)
         glow.strokeColor = .clear
         glow.blendMode = .add
         visual.addChild(glow)
         let sprite = SKSpriteNode(
-            texture: Theme.symbolTexture(systemName: "bolt.fill", color: Theme.rocket, pointSize: 24)
+            texture: Theme.symbolTexture(systemName: "bolt.fill", color: Theme.rocket, pointSize: 38)
         )
         visual.addChild(sprite)
         sprite.run(.repeatForever(.rotate(byAngle: .pi * 2, duration: 1.2)))
 
-        spawnPickup(
-            rail: rail, visual: visual, radius: 15,
+        let pickup = spawnPickup(
+            rail: rail, visual: visual, radius: 22,
             category: PhysicsCategory.rocket,
             fallMultiplier: 1.1, name: "rocket"
         )
+        let pulse = SKAction.sequence([
+            .scale(to: 1.18, duration: 0.42),
+            .scale(to: 1.00, duration: 0.42)
+        ])
+        pickup.run(.repeatForever(pulse))
     }
 
     // MARK: - Collisions
